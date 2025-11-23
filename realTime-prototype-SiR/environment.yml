@@ -1,0 +1,11 @@
+name: life-stages-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - portaudio       # Required for Microphone access
+  - python-dotenv   # Moves this to conda-forge for better reliability
+  - pip
+  - pip:
+    # The official OpenAI Agents SDK
+    - "openai-agents[voice]"
