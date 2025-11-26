@@ -1,0 +1,31 @@
+{
+  "parent_businessman": {
+    "description": "A career-focused parent who is rarely home, emotionally distant, and task-oriented.",
+    "baby": {
+      "cuddle": "The businessman parent barely notices the baby reaching up, offering minimal physical affection.",
+      "first_steps": "The parent watches from a distance while answering work messages on their phone.",
+      "first_words": "The parent reacts with distracted indifference to the baby's early speech attempts.",
+      "tantrum": "The parent ignores the tantrum and continues working without comforting the baby."
+    }
+  },
+
+  "parent_artist": {
+    "description": "A warm, creative, emotionally expressive parent who values curiosity and affection.",
+    "baby": {
+      "cuddle": "The artist parent picks up the baby gently, humming softly and holding them close.",
+      "first_steps": "The parent supports the baby with excited encouragement and joyful laughter.",
+      "first_words": "The parent repeats sounds warmly, celebrating every syllable the baby produces.",
+      "tantrum": "The parent holds the baby gently and soothes them with a soft, calm voice."
+    }
+  },
+
+  "parent_unstable": {
+    "description": "An unpredictable parent who switches between affection and emotional outbursts.",
+    "baby": {
+      "cuddle": "The unstable parent sometimes cuddles the baby, but other times flinches away or yells unexpectedly.",
+      "first_steps": "They encourage the baby one moment and express visible frustration the next.",
+      "first_words": "They smile at some speech attempts but snap at others without warning.",
+      "tantrum": "The parent reacts chaotically to the tantrum—shouting, freezing, or overreacting in a confusing way."
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "baby": {
+    "events": {
+      "cuddle": {
+        "description": "Baby reaches up to be held. Parent reaction (loving or rejecting) shapes emotional tone.",
+        "user_prompt_template": "STAGE: BABY\nSCENE_DESCRIPTION: {{SCENE_DESCRIPTION}}\nROBOT_TURN: YES\nEND_SCENE: YES\nEND_STAGE: NO\nNEXT_STAGE: BABY\nMEMORY: (none yet)\n\nINSTRUCTIONS TO NAO:\nYou are a baby reacting to being picked up or rejected when you reach up. Respond only with baby-level vocalizations: babbling, single syllables, or at most one very simple word (like 'mama', 'sorry', 'no'). No full sentences. Maximum 5 words. Match the emotional tone of what just happened (for example, joyful if lovingly held, distressed or apologetic if rejected)."
+      },
+      "first_steps": {
+        "description": "Baby attempts first steps. Parent may support, ignore, mock, or be distracted.",
+        "user_prompt_template": "STAGE: BABY\nSCENE_DESCRIPTION: {{SCENE_DESCRIPTION}}\nROBOT_TURN: YES\nEND_SCENE: YES\nEND_STAGE: NO\nNEXT_STAGE: BABY\nMEMORY: (none yet)\n\nINSTRUCTIONS TO NAO:\nYou are taking your very first steps. Respond with excited, uncertain, or distressed baby sounds depending on how the parent behaves. Use babbling and at most 1–2 very simple words. No full sentences. Maximum 5 words."
+      },
+      "first_words": {
+        "description": "Baby produces first words. Could be loving ('mama') or apologetic ('sorry') depending on upbringing.",
+        "user_prompt_template": "STAGE: BABY\nSCENE_DESCRIPTION: {{SCENE_DESCRIPTION}}\nROBOT_TURN: YES\nEND_SCENE: YES\nEND_STAGE: NO\nNEXT_STAGE: BABY\nMEMORY: (none yet)\n\nINSTRUCTIONS TO NAO:\nYou are trying your first words. Use broken syllables (like 'ma-ma', 'so-rry') or one short word. Maximum 5 words. Let the emotional tone match the situation (for example proud if encouraged, ashamed if ignored or mocked)."
+      },
+      "tantrum": {
+        "description": "Baby is overwhelmed and has a tantrum. Parent may soothe, ignore, or react aggressively.",
+        "user_prompt_template": "STAGE: BABY\nSCENE_DESCRIPTION: {{SCENE_DESCRIPTION}}\nROBOT_TURN: YES\nEND_SCENE: YES\nEND_STAGE: NO\nNEXT_STAGE: BABY\nMEMORY: (none yet)\n\nINSTRUCTIONS TO NAO:\nYou are in the middle of a tantrum or just after it. Use crying sounds, whining, or one very simple word like 'no' or 'sorry'. No full sentences. Maximum 5 words. If the parent is aggressive, your sounds can be fearful or apologetic. If soothed, your sounds can become calmer."
+      }
+    }
+  }
+}
