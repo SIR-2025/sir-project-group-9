@@ -1,0 +1,218 @@
+# motion_controller.py
+# -*- coding: utf-8 -*-
+
+import os
+import re
+from typing import Optional, Set
+
+import emo_list  # contains MotionAnimationsApp and ALL_ANIMATIONS
+
+# Import NAO TTS request type (same as in demo_nao_talk.py)
+from sic_framework.devices.common_naoqi.naoqi_text_to_speech import (
+    NaoqiTextToSpeechRequest,
+)
+
+
+class EmotionMotionController:
+    """
+    High-level wrapper around emo_list.MotionAnimationsApp.
+
+    Responsibilities:
+    - Initialize NAO connection via SIC.
+    - Map motion tags (e.g. "angry", "sad", "gesture_hey") to NAO animations.
+    - Provide real TTS for speech, with fallback simulation mode.
+    """
+
+    def __init__(
+        self,
+        nao_ip: Optional[str] = "10.0.0.137",
+        auto_stand: bool = True,
+        enable_simulation: bool = True,
+    ) -> None:
+        """
+        :param nao_ip: NAO robot IP. If None, use NAO_IP environment variable.
+        :param auto_stand: If True, go to Stand posture on startup.
+        :param enable_simulation: If True, print simulated actions when NAO is not available.
+        """
+        self.nao_ip: Optional[str] = nao_ip or os.getenv("NAO_IP")
+        self.auto_stand = auto_stand
+        self.enable_simulation = enable_simulation
+
+        self.app: Optional[emo_list.MotionAnimationsApp] = None
+
+        if self.nao_ip:
+            self._init_real_robot()
+        else:
+            print("[MOTION] No NAO IP provided. Running in simulation mode only.")
+
+    # ------------------------------------------------------------------
+    # Initialization
+    # ------------------------------------------------------------------
+
+    def _init_real_robot(self) -> None:
+        """
+        Try to initialize MotionAnimationsApp from emo_list.
+        """
+        try:
+            print(f"[MOTION] Initializing MotionAnimationsApp with IP {self.nao_ip} ...")
+            self.app = emo_list.MotionAnimationsApp(
+                nao_ip=self.nao_ip,
+                auto_stand=self.auto_stand,
+            )
+            self.app.setup()
+            if self.auto_stand:
+                self.app.go_to_stand()
+            print("[MOTION] MotionAnimationsApp initialized successfully.")
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"[MOTION] Failed to initialize MotionAnimationsApp: {exc}")
+            self.app = None
+
+    def is_real_robot_available(self) -> bool:
+        """
+        Return True if NAO is successfully initialized.
+        """
+        return self.app is not None and getattr(self.app, "nao", None) is not None
+
+    # ------------------------------------------------------------------
+    # Tag normalization and animation mapping
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_tag(tag: str) -> str:
+        """
+        Convert something like 'gesture_hey' or 'very_angry' to a compact
+        semantic keyword that can be matched against animation names.
+        Example:
+            'gesture_hey' -> 'hey'
+            'very_angry'  -> 'veryangry'
+        """
+        raw = tag.strip().lower()
+
+        # Explicit prefix for gesture tags, we only keep the semantic part.
+        if raw.startswith("gesture_"):
+            raw = raw[len("gesture_") :]
+
+        # Remove underscores for easier substring matching.
+        return raw.replace("_", "")
+
+    def _find_animation_for_tag(self, tag: str) -> Optional[str]:
+        """
+        Given a motion tag string like 'angry', 'sad', 'gesture_hey', etc.,
+        try to find a suitable animation name from emo_list.ALL_ANIMATIONS.
+
+        Strategy:
+        1. Normalize tag to a compact semantic token, e.g. 'gesture_hey' -> 'hey'.
+        2. For each animation name in ALL_ANIMATIONS:
+           - Take base name (after the last '/'), e.g. 'Angry_1'.
+           - Lowercase it and remove non-letters, e.g. 'angry1' -> 'angry'.
+           - Check if normalized tag is contained in this compact base.
+        3. Return the first match found.
+        """
+        if not tag:
+            return None
+
+        normalized = self._normalize_tag(tag)
+        if not normalized:
+            return None
+
+        for name in emo_list.ALL_ANIMATIONS:
+            base = name.split("/")[-1]  # e.g. "Angry_1"
+            base_low = base.lower()
+            base_compact = re.sub(r"[^a-z]", "", base_low)  # "angry1" -> "angry"
+
+            if normalized in base_compact:
+                return name
+
+        return None
+
+    # ------------------------------------------------------------------
+    # TTS (real or simulated)
+    # ------------------------------------------------------------------
+
+    def speak_text(self, text: str, emotion_tag: Optional[str] = None) -> None:
+        """
+        Use NAO's built-in TTS to say the given text.
+        If NAO is unavailable, fall back to printing a simulated TTS line.
+
+        :param text: The text that NAO should say.
+        :param emotion_tag: Optional motion/emotion tag (e.g. "angry", "sad").
+                            If provided, we may enable animated TTS.
+        """
+        if not text:
+            return
+
+        # Choose whether to use animated TTS based on whether we have an emotion.
+        animated = emotion_tag is not None and not emotion_tag.startswith("gesture_")
+
+        # Real robot available
+        if self.is_real_robot_available():
+            try:
+                print(
+                    f"[TTS] NAO speaking (animated={animated}, tag={emotion_tag!r}): {text}"
+                )
+                # Same pattern as in demo_nao_talk.py:
+                # self.nao.tts.request(NaoqiTextToSpeechRequest("Hello ...", animated=True))
+                self.app.nao.tts.request(
+                    NaoqiTextToSpeechRequest(text, animated=animated)
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                print(f"[TTS] Error while sending TTS request: {exc}")
+            return
+
+        # No robot available, simulation mode
+        if self.enable_simulation:
+            if emotion_tag:
+                print(f"[TTS][SIM] ({emotion_tag}) {text}")
+            else:
+                print(f"[TTS][SIM] {text}")
+        else:
+            print("[TTS] Robot is not available and simulation is disabled.")
+
+    # ------------------------------------------------------------------
+    # Motion playback for a set of tags
+    # ------------------------------------------------------------------
+
+    def play_for_emotions(self, emotions: Set[str]) -> None:
+        """
+        For each emotion/motion tag in the set, find a matching NAO animation and play it.
+        If NAO is not available but simulation is enabled, print what would be played.
+
+        Tags can be:
+        - Pure emotions  like 'angry', 'sad', 'bored', 'surprise', etc.
+        - Gesture tags   like 'gesture_hey', 'gesture_yes', 'gesture_bow', etc.
+        - A special tag 'neutral' meaning "no animation".
+        """
+        if not emotions:
+            print("[MOTION] No motion tags to play.")
+            return
+
+        # Do not play anything for neutral tags.
+        filtered = {e for e in emotions if e != "neutral"}
+        if not filtered:
+            print("[MOTION] Only 'neutral' tag found. No animation will be played.")
+            return
+
+        for tag in filtered:
+            animation = self._find_animation_for_tag(tag)
+            if not animation:
+                print(f"[MOTION] No animation mapped for tag '{tag}'.")
+                continue
+
+            # Real robot available
+            if self.is_real_robot_available():
+                try:
+                    print(
+                        f"[MOTION] Playing animation '{animation}' for tag '{tag}'."
+                    )
+                    self.app.play_animation(animation)
+                except Exception as exc:  # pylint: disable=broad-except
+                    print(f"[MOTION] Error while playing animation '{animation}': {exc}")
+                continue
+
+            # No real robot, but simulation allowed
+            if self.enable_simulation:
+                print(
+                    f"[MOTION][SIM] Would play animation '{animation}' for tag '{tag}'."
+                )
+            else:
+                print("[MOTION] Robot is not available and simulation is disabled.")
