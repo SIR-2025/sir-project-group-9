@@ -1,0 +1,59 @@
+{
+  "parent_businessman": {
+    "description": "A career-focused parent who is rarely home, emotionally distant, and task-oriented.",
+    "child": {
+      "school_day": "The businessman parent hurries the child into school with little reassurance.",
+      "failure_comfort": "The parent dismisses the child's failure and tells them to try harder, without comfort."
+    }
+  },
+  "parent_artist": {
+    "description": "A warm, creative, emotionally expressive parent who values curiosity and affection.",
+    "child": {
+      "school_day": "The artist parent reassures the child, walking them into school with words of encouragement.",
+      "failure_comfort": "The parent comforts the child gently, reassuring them that it’s okay to fail."
+    }
+  },
+  "parent_unstable": {
+    "description": "An unpredictable parent who switches between affection and emotional outbursts.",
+    "child": {
+      "school_day": "The unstable parent rushes the child into school, with no reassurance or a hug.",
+      "failure_comfort": "The parent’s reaction to the child’s failure is unpredictable, sometimes comforting, sometimes scolding."
+    }
+  },
+  "gentle_teacher": {
+    "description": "A teacher who is patient, understanding, and supportive of the child's learning.",
+    "child": {
+      "learning_with_teacher": "The teacher provides patient, supportive guidance, making the child feel safe and valued."
+    }
+  },
+  "impatient_teacher": {
+    "description": "A teacher who is easily frustrated and reacts harshly to the child’s learning needs.",
+    "child": {
+      "learning_with_teacher": "The teacher dismisses the child's questions quickly, showing frustration when the child does not understand."
+    }
+  },
+  "ignoring_teacher": {
+    "description": "A teacher who avoids engaging with the child or is emotionally distant.",
+    "child": {
+      "learning_with_teacher": "The teacher ignores the child's questions, leaving them confused and unsure of how to proceed."
+    }
+  },
+  "bully_peer": {
+    "description": "A peer who excludes or bullies the child, making them feel rejected or unwanted.",
+    "child": {
+      "peer_interaction": "The bully peer mocks the child, calling them names or leaving them out of activities."
+    }
+  },
+  "ignoring_peer": {
+    "description": "A peer who ignores the child, neither including nor excluding them explicitly.",
+    "child": {
+      "peer_interaction": "The ignoring peer doesn’t interact with the child, leaving them standing alone."
+    }
+  },
+  "friend_peer": {
+    "description": "A peer who includes the child in play and treats them kindly.",
+    "child": {
+      "peer_interaction": "The friend peer invites the child to play, laughing and sharing in fun activities."
+    }
+  }
+}
