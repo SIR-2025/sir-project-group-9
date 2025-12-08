@@ -2,16 +2,16 @@
 """
 motion_animations_demo.py
 
-使用 Social Interaction Cloud (SIC) 通过 NAO 自带的动画接口：
-- 列出并打印以下两个路径下的所有预定义动画：
+Use Social Interaction Cloud (SIC) to access NAO's built-in animation interface:
+- List and print all predefined animations under the following two paths:
     * animations/Stand/Emotions/Negative
     * animations/Stand/Gestures
-- 选择并表演其中任意一个动画
+- Select and perform any of these animations
 
-注意：
-- 这里只使用 sic_framework，不直接使用 naoqi / qi SDK。
-- 动画列表来自 NAO 官方文档与示例输出，如果你的机器人上安装了自定义行为，
-  它们不会自动出现在本列表中，需要你自己手动添加。
+Note:
+- This script only uses sic_framework, not naoqi / qi SDK directly.
+- The animation list is from NAO's official documentation and example output. If you have custom behaviors
+  installed on your robot, they will not automatically appear in this list and you need to add them manually.
 """
 
 from __future__ import print_function
@@ -26,7 +26,7 @@ from sic_framework.devices.common_naoqi.naoqi_motion import (
 )
 
 # ---------------------------------------------------------------------------
-# 1. 预定义动画列表
+# 1. Predefined Animation List
 # ---------------------------------------------------------------------------
 
 NEGATIVE_EMOTION_ANIMATIONS = [
@@ -58,7 +58,7 @@ NEGATIVE_EMOTION_ANIMATIONS = [
 ]
 
 GESTURE_ANIMATIONS = [
-    # 来自示例输出
+    # From example output
     "animations/Stand/Gestures/Angry_1",
     "animations/Stand/Gestures/Angry_2",
     "animations/Stand/Gestures/Angry_3",
@@ -121,7 +121,7 @@ GESTURE_ANIMATIONS = [
     "animations/Stand/Gestures/HeSays_1",
     "animations/Stand/Gestures/HeSays_2",
     "animations/Stand/Gestures/HeSays_3",
-    # 来自 Aldebaran 官方 NAO 动画表（补充缺失的几个）
+    # From Aldebaran's official NAO animation list (to add the missing ones)
     "animations/Stand/Gestures/Hey_1",
     "animations/Stand/Gestures/Hey_6",
     "animations/Stand/Gestures/IDontKnow_1",
@@ -145,50 +145,50 @@ ALL_ANIMATIONS = NEGATIVE_EMOTION_ANIMATIONS + GESTURE_ANIMATIONS
 
 
 # ---------------------------------------------------------------------------
-# 2. 打印文件名工具函数
+# 2. Utility function to print animation file names
 # ---------------------------------------------------------------------------
 
 def print_animation_lists():
-    """打印两个路径下所有预定义动画名称。"""
+    """Prints the names of all predefined animations under the two paths."""
     print("=" * 60)
-    print("animations/Stand/Emotions/Negative  下的预定义动画:")
+    print("Predefined animations under animations/Stand/Emotions/Negative:")
     for idx, name in enumerate(NEGATIVE_EMOTION_ANIMATIONS):
         print("[{:02d}] {}".format(idx, name))
 
     print("\n" + "=" * 60)
-    print("animations/Stand/Gestures           下的预定义动画:")
+    print("Predefined animations under animations/Stand/Gestures:")
     offset = len(NEGATIVE_EMOTION_ANIMATIONS)
     for i, name in enumerate(GESTURE_ANIMATIONS):
         print("[{:02d}] {}".format(i + offset, name))
 
     print("=" * 60)
-    print("总计 {} 个动画.".format(len(ALL_ANIMATIONS)))
+    print("Total {} animations.".format(len(ALL_ANIMATIONS)))
 
 
 # ---------------------------------------------------------------------------
-# 3. 应用主类：连接 NAO 并表演动画
+# 3. Main App Class: Connect to NAO and Perform Animations
 # ---------------------------------------------------------------------------
 
 class MotionAnimationsApp(object):
     def __init__(self, nao_ip, auto_stand=True):
         """
-        :param nao_ip: 机器人 IP 地址
-        :param auto_stand: 在播放动画前是否自动切到 Stand 姿势
+        :param nao_ip: IP address of the robot
+        :param auto_stand: Whether to automatically go to Stand posture before playing an animation
         """
         self.nao_ip = nao_ip
         self.auto_stand = auto_stand
         self.nao = None
 
-    # ------ 初始化 & 姿势控制 ------
+    # ------ Initialization & Posture Control ------
     def setup(self):
-        """初始化 NAO 设备对象。"""
+        """Initializes the NAO device object."""
         print("[INFO] Connecting to Nao at {} via SIC...".format(self.nao_ip))
-        # 这里不会直接使用 naoqi，仅通过 SIC 的 Nao 封装
+        # We don't use naoqi directly here, only SIC's Nao wrapper
         self.nao = Nao(ip=self.nao_ip)
         print("[INFO] Nao device created.")
 
     def go_to_stand(self):
-        """让 NAO 切到 Stand 姿势（如果需要）。"""
+        """Makes NAO go to Stand posture (if needed)."""
         if not self.auto_stand:
             return
 
@@ -198,29 +198,29 @@ class MotionAnimationsApp(object):
         except Exception as exc:  # pylint: disable=broad-except
             print("[WARN] Failed to change posture to Stand: {}".format(exc))
 
-    # ------ 动画播放 ------
+    # ------ Animation Playback ------
     def play_animation(self, animation_name):
-        """播放指定名称的动画。"""
+        """Plays the animation with the specified name."""
         print("[INFO] Playing animation: {}".format(animation_name))
         try:
             self.nao.motion.request(NaoqiAnimationRequest(animation_name))
         except Exception as exc:  # pylint: disable=broad-except
             print("[ERROR] Failed to play animation {}: {}".format(animation_name, exc))
 
-    # ------ 交互式命令行 ------
+    # ------ Interactive Command Line ------
     def interactive_loop(self):
-        """简单的命令行交互，可以通过索引或名称选择动画播放。"""
+        """A simple command-line interface to select and play animations by index or name."""
         if self.nao is None:
             self.setup()
 
         self.go_to_stand()
         print_animation_lists()
 
-        print("\n输入动画的 索引 或 全路径 / 结尾名称 进行播放，例如：")
-        print("  - 0            # 播放列表中第 0 个动画")
-        print("  - Angry_1      # 根据结尾匹配")
+        print("\nEnter the index, full path, or ending name of the animation to play, for example:")
+        print("  - 0            # Play the 0th animation in the list")
+        print("  - Angry_1      # Match by the ending name")
         print("  - animations/Stand/Gestures/Hey_1")
-        print("输入 'list' 重新打印列表，输入 'q' / 'quit' 退出。\n")
+        print("Enter 'list' to print the list again, enter 'q' / 'quit' to exit.\n")
 
         if sys.version_info[0] < 3:
             input_func = raw_input  # type: ignore[name-defined]
@@ -229,7 +229,7 @@ class MotionAnimationsApp(object):
 
         while True:
             try:
-                user_input = input_func("选择动画> ").strip()
+                user_input = input_func("Select animation> ").strip()
             except (EOFError, KeyboardInterrupt):
                 print("\n[INFO] Bye.")
                 break
@@ -245,26 +245,26 @@ class MotionAnimationsApp(object):
                 print_animation_lists()
                 continue
 
-            # 尝试把输入当作索引
+            # Try to treat the input as an index
             if user_input.isdigit():
                 idx = int(user_input)
                 if 0 <= idx < len(ALL_ANIMATIONS):
                     self.play_animation(ALL_ANIMATIONS[idx])
                 else:
-                    print("[WARN] 索引超出范围 0-{}.".format(len(ALL_ANIMATIONS) - 1))
+                    print("[WARN] Index out of range 0-{}.".format(len(ALL_ANIMATIONS) - 1))
                 continue
 
-            # 若不是纯数字，则尝试匹配路径或结尾名称
-            # 完整路径（以 animations/ 开头）
+            # If not a digit, try to match a path or ending name
+            # Full path (starts with animations/)
             anim_name = None
             if user_input.startswith("animations/"):
                 if user_input in ALL_ANIMATIONS:
                     anim_name = user_input
                 else:
-                    print("[WARN] 在预定义列表中找不到该动画：{}".format(user_input))
+                    print("[WARN] Could not find this animation in the predefined list: {}".format(user_input))
                     continue
             else:
-                # 根据结尾名称匹配，比如 "Angry_1"
+                # Match by ending name, e.g., "Angry_1"
                 matches = [
                     name for name in ALL_ANIMATIONS
                     if name.endswith("/" + user_input)
@@ -272,12 +272,12 @@ class MotionAnimationsApp(object):
                 if len(matches) == 1:
                     anim_name = matches[0]
                 elif len(matches) > 1:
-                    print("[WARN] 名称不唯一，匹配到多个动画：")
+                    print("[WARN] The name is not unique, multiple animations matched:")
                     for m in matches:
                         print("  -", m)
                     continue
                 else:
-                    print("[WARN] 找不到名称包含 '{}' 的动画。".format(user_input))
+                    print("[WARN] Could not find an animation with a name containing '{}'.”.format(user_input))
                     continue
 
             if anim_name:
@@ -285,64 +285,64 @@ class MotionAnimationsApp(object):
 
 
 # ---------------------------------------------------------------------------
-# 4. 命令行入口
+# 4. Command-line Entry Point
 # ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
-        description="列出并播放 NAO 预定义情绪/手势动画 (SIC, 无 naoqi 直接调用)"
+        description="List and play NAO's predefined emotion/gesture animations (SIC, no direct naoqi calls)"
     )
     parser.add_argument(
         "--ip",
         "-i",
         required=True,
-        help="NAO 机器人的 IP 地址",
+        help="IP address of the NAO robot",
     )
     parser.add_argument(
         "--list-only",
         action="store_true",
-        help="仅输出动画列表，不连接机器人、不播放动作",
+        help="Only output the animation list, do not connect to the robot or play actions",
     )
     parser.add_argument(
         "--no-stand",
         action="store_true",
-        help="不要在播放前自动切换到 Stand 姿势",
+        help="Do not automatically switch to Stand posture before playing",
     )
     parser.add_argument(
         "--play",
         help=(
-            "直接播放指定动画，而不是进入交互模式；"
-            "可以是索引 (整数) 或 动画结尾名称 / 全路径"
+            "Directly play the specified animation instead of entering interactive mode; "
+            "can be an index (integer) or the animation's ending name / full path"
         ),
     )
 
     args = parser.parse_args()
 
-    # 1) 仅打印列表的模式
+    # 1) Mode to only print the list
     if args.list_only:
         print_animation_lists()
         return
 
-    # 2) 需要实际连接 NAO 的模式
+    # 2) Mode that requires an actual connection to NAO
     app = MotionAnimationsApp(nao_ip=args.ip, auto_stand=not args.no_stand)
 
     app.setup()
     app.go_to_stand()
 
     if args.play:
-        # 直接播放一次（复用和交互模式一样的解析逻辑）
+        # Play directly once (reuse the same parsing logic as interactive mode)
         user_input = args.play.strip()
         if user_input.isdigit():
             idx = int(user_input)
             if 0 <= idx < len(ALL_ANIMATIONS):
                 app.play_animation(ALL_ANIMATIONS[idx])
             else:
-                print("[WARN] 索引超出范围 0-{}.".format(len(ALL_ANIMATIONS) - 1))
+                print("[WARN] Index out of range 0-{}.”.format(len(ALL_ANIMATIONS) - 1))
         elif user_input.startswith("animations/"):
             if user_input in ALL_ANIMATIONS:
                 app.play_animation(user_input)
             else:
-                print("[WARN] 在预定义列表中找不到该动画：{}".format(user_input))
+                print("[WARN] Could not find this animation in the predefined list: {}".format(user_input))
         else:
             matches = [
                 name for name in ALL_ANIMATIONS
@@ -351,13 +351,13 @@ def main():
             if len(matches) == 1:
                 app.play_animation(matches[0])
             elif len(matches) > 1:
-                print("[WARN] 名称不唯一，匹配到多个动画：")
+                print("[WARN] The name is not unique, multiple animations matched:")
                 for m in matches:
                     print("  -", m)
             else:
-                print("[WARN] 找不到名称包含 '{}' 的动画。".format(user_input))
+                print("[WARN] Could not find an animation with a name containing '{}'.”.format(user_input))
     else:
-        # 进入交互式循环
+        # Enter interactive loop
         app.interactive_loop()
 
 
