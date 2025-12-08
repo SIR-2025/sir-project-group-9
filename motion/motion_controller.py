@@ -25,7 +25,7 @@ class EmotionMotionController:
 
     def __init__(
         self,
-        nao_ip: Optional[str] = "10.0.0.137",
+        nao_ip: Optional[str] = "10.0.0.127",
         auto_stand: bool = True,
         enable_simulation: bool = True,
     ) -> None:
@@ -144,16 +144,19 @@ class EmotionMotionController:
         # Choose whether to use animated TTS based on whether we have an emotion.
         animated = emotion_tag is not None and not emotion_tag.startswith("gesture_")
 
+        # Set volume to 50% using an embedded TTS tag.
+        modified_text = f"\\vct=50\\{text}"
+
         # Real robot available
         if self.is_real_robot_available():
             try:
                 print(
-                    f"[TTS] NAO speaking (animated={animated}, tag={emotion_tag!r}): {text}"
+                    f"[TTS] NAO speaking (animated={animated}, tag={emotion_tag!r}): {modified_text}"
                 )
                 # Same pattern as in demo_nao_talk.py:
                 # self.nao.tts.request(NaoqiTextToSpeechRequest("Hello ...", animated=True))
                 self.app.nao.tts.request(
-                    NaoqiTextToSpeechRequest(text, animated=animated)
+                    NaoqiTextToSpeechRequest(modified_text, animated=animated)
                 )
             except Exception as exc:  # pylint: disable=broad-except
                 print(f"[TTS] Error while sending TTS request: {exc}")
@@ -162,9 +165,9 @@ class EmotionMotionController:
         # No robot available, simulation mode
         if self.enable_simulation:
             if emotion_tag:
-                print(f"[TTS][SIM] ({emotion_tag}) {text}")
+                print(f"[TTS][SIM] ({emotion_tag}) {modified_text}")
             else:
-                print(f"[TTS][SIM] {text}")
+                print(f"[TTS][SIM] {modified_text}")
         else:
             print("[TTS] Robot is not available and simulation is disabled.")
 

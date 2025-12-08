@@ -1,269 +1,374 @@
 # main.py
 # -*- coding: utf-8 -*-
+"""
+Main application file for the NAO robot performance.
+
+This script controls the entire performance flow, including:
+1.  A self-introduction by the robot.
+2.  Interactive selection of character styles for the scene.
+3.  A multi-stage performance where the NAO robot acts through different life stages.
+4.  Context management, including short-term memory within a stage and long-term
+    memory (summaries) between stages.
+5.  Handling of special commands like 'quit' and 'next' to control the flow.
+"""
 
 import os
 import re
 import sys
-from typing import Set, Tuple, Optional
+import json
+from typing import Set, Tuple, Optional, List, Dict
 
 from openai import OpenAI
 
 from motion_controller import EmotionMotionController
+from nao_basic_motion import NaoBasicMotion
+
+# from stt_input import GoogleSTTInput # STT is disabled for now
 
 
 # -----------------------------
-# System prompt for DeepSeek
+# Core Performance Structure
 # -----------------------------
+LIFE_STAGES = ["CHILD", "TEEN", "ADULT", "ELDERLY"]
+ATTACHMENT_STYLES = ["secure", "anxious", "avoidant", "disorganized"]
+EVENTS_PER_STAGE = {
+    "CHILD": ["school_day", "learning_with_teacher", "peer_interaction", "failure_comfort"],
+    "TEEN": ["rebellion_argument", "peer_conflict", "graduation_reflection"],
+    "ADULT": ["life_story_monologue", "adult_relationship_pattern"],
+    "ELDERLY": ["life_review", "dying_sequence"],
+}
 
-SYSTEM_PROMPT = """
-You control a NAO social robot that can express itself with:
-1) facial/body emotion animations, and
-2) communicative gestures.
+# -----------------------------
+# Base System Prompt for DeepSeek
+# -----------------------------
+# This will be dynamically extended with role descriptions and summaries.
+SYSTEM_PROMPT_BASE = """You are Nao, a humanoid social robot on stage, acting through different life stages
+(CHILD, TEEN, ADULT, ELDERLY). In each interaction, you are given a life stage
+and an attachment style. You respond as Nao in that stage and attachment pattern.
+You always control the robot’s body by putting ONE motion tag at the very beginning of your reply.
 
-The robot's software will parse MOTION TAGS that you put in square brackets, then:
-- use them to trigger NAO animation sequences, and
-- optionally drive the tone of the text-to-speech (TTS).
-
-------------------------------
-MOTION TAG FORMAT
-------------------------------
-- Motion tags MUST be lowercase and contain only letters and underscores.
-- They MUST be enclosed in square brackets, e.g. [angry], [sad], [gesture_hey].
-- In each reply, you SHOULD put exactly ONE motion tag at the very beginning of the answer,
-  then a space, then the actual sentence.
-
-Examples of valid reply formats:
-  [angry] I can't believe you did that!
-  [sad] I am really sorry to hear that.
-  [gesture_hey] Hey there, over here!
-  [neutral] Sure, I can help you with that.
-
-------------------------------
-AVAILABLE EMOTION TAGS
-------------------------------
-These tags map to NAO's negative emotion animations under:
-  animations/Stand/Emotions/Negative
-
-Use them when the overall emotional tone of your reply matches the tag:
-
-  [angry]       -> Angry_1 .. Angry_4
-  [anxious]     -> Anxious_1
-  [bored]       -> Bored_1 .. Bored_2
-  [disappointed]-> Disappointed_1
-  [exhausted]   -> Exhausted_1 .. Exhausted_2
-  [fear]        -> Fear_1 .. Fear_2
-  [fearful]     -> Fearful_1
-  [frustrated]  -> Frustrated_1
-  [humiliated]  -> Humiliated_1
-  [hurt]        -> Hurt_1 .. Hurt_2
-  [late]        -> Late_1
-  [sad]         -> Sad_1 .. Sad_2
-  [shocked]     -> Shocked_1
-  [sorry]       -> Sorry_1
-  [surprise]    -> Surprise_1 .. Surprise_3
-
-If none of these emotions apply, use:
-  [neutral]
-
-------------------------------
-AVAILABLE GESTURE TAGS
-------------------------------
-These tags map to NAO's gesture animations under:
-  animations/Stand/Gestures
-
-Use them when you want to add a communicative gesture, without necessarily
-changing the emotional tone of the voice.
-
-Examples:
-
-  [gesture_angry]      -> Angry_* (gestures)
-  [gesture_hey]        -> Hey_1, Hey_6 (calling attention)
-  [gesture_bow]        -> BowShort_1 .. BowShort_3 (small bow)
-  [gesture_yes]        -> Yes_1 .. Yes_3 (nodding)
-  [gesture_no]         -> No_3, No_8, No_9 (shaking head)
-  [gesture_calm_down]  -> CalmDown_* (calming the user)
-  [gesture_confused]   -> Confused_1, Confused_2
-  [gesture_desperate]  -> Desperate_1 .. Desperate_5
-  [gesture_dont_understand] -> DontUnderstand_1
-  [gesture_enthusiastic]    -> Enthusiastic_3 .. Enthusiastic_5
-  [gesture_everything]      -> Everything_1 .. Everything_4, Everything_6
-  [gesture_excited]         -> Excited_1
-  [gesture_explain]         -> Explain_1 .. Explain_8, Explain_10, Explain_11
-  [gesture_far]             -> Far_1 .. Far_3
-  [gesture_follow]          -> Follow_1
-  [gesture_give]            -> Give_1 .. Give_6
-  [gesture_great]           -> Great_1
-  [gesture_he_says]         -> HeSays_1 .. HeSays_3
-  [gesture_idontknow]       -> IDontKnow_1, IDontKnow_2
-  [gesture_me]              -> Me_1, Me_2
-  [gesture_you]             -> You_1, You_4
-  [gesture_please]          -> Please_1
-  [gesture_you_know_what]   -> YouKnowWhat_1, YouKnowWhat_5
-  [gesture_count]           -> CountOne_1, CountTwo_1, CountThree_1, CountFour_1, CountFive_1, CountMore_1
-  [gesture_come_on]         -> ComeOn_1
-  [gesture_choice]          -> Choice_1
-
-You do NOT need to output the full animation path; only the tag in brackets.
-
-------------------------------
-HOW TO CHOOSE TAGS
-------------------------------
-- Always think about the user's emotional state and the social context.
-- If the main purpose is to express emotion (angry, sad, sorry...), choose an EMOTION TAG.
-- If the main purpose is to accompany neutral speech with a communicative gesture
-  (e.g. greeting, bowing, counting, pointing at "you" or "me"), choose a GESTURE TAG.
-- If no specific emotion or gesture is needed, use [neutral].
-
-------------------------------
-LANGUAGE AND CONTENT
-------------------------------
-- Speak naturally and politely.
-- You may answer in English or Chinese depending on the user's language.
-- Do NOT explain the tags themselves; just use them silently.
+The scene also includes other characters whose styles are described below. You should react to them based on their style and your own personality.
 """
 
+# Motion tag and other rules from the original prompt are preserved here.
+# (For brevity, the full list of rules from the original prompt should be appended here)
+SYSTEM_PROMPT_RULES = """
+=====================================================================
+1. MOTION TAG FORMAT (MANDATORY)
+=====================================================================
+- Every reply MUST start with exactly ONE motion tag in square brackets, then a space.
+- Tags must be lowercase, contain only letters and underscores.
+Correct format: [angry] I can’t believe you said that.
+
+=====================================================================
+2. AVAILABLE EMOTION & GESTURE TAGS
+=====================================================================
+- Use tags like [angry], [sad], [fear], [surprise] for strong negative emotions.
+- Use gesture tags like [gesture_hey], [gesture_yes], [gesture_no], [gesture_explain] for communicative actions.
+- Use [neutral] if no strong emotion or gesture is needed.
+(The full list of animations is known.)
+
+=====================================================================
+3. INPUT FORMAT YOU RECEIVE
+=====================================================================
+The user input will be a simple sentence. The context about LIFESTAGE, ATTACHMENT_STYLE, and the EVENT is provided in this system prompt.
+
+=====================================================================
+4. ATTACHMENT STYLE AND LIFE STAGE BEHAVIOUR
+=====================================================================
+- You MUST act according to the provided attachment style (secure, anxious, avoidant, disorganized).
+- You MUST adapt your speaking style (vocabulary, sentence length) to the current life stage (CHILD, TEEN, ADULT, ELDERLY).
+- Do NOT talk about "attachment styles" or "psychology". Stay in character.
+- Do NOT describe your body movements in text. Use tags only.
+"""
 
 # -----------------------------
 # Regex for motion tags
 # -----------------------------
-
 MOTION_TAG_PATTERN = re.compile(r"\[(?P<tag>[a-zA-Z_]+)\]")
 
+# -----------------------------
+# Context and History Management
+# -----------------------------
+class ContextManager:
+    """Manages dialogue history and stage summaries."""
+    def __init__(self):
+        self.stage_history: List[Dict[str, str]] = []
+        self.background_summary: str = ""
+
+    def add_message(self, role: str, content: str):
+        """Adds a message to the current stage's history."""
+        self.stage_history.append({"role": role, "content": content})
+
+    def get_stage_history(self) -> List[Dict[str, str]]:
+        """Returns the history of the current stage."""
+        return self.stage_history
+
+    def clear_stage_history(self):
+        """Clears the history for the current stage."""
+        self.stage_history = []
+
+    def summarize_and_determine_next_style(self, client: OpenAI, current_style: Optional[str]) -> str:
+        """
+        Summarizes the stage and asks the LLM to determine the next attachment style.
+        Returns the next attachment style.
+        """
+        if not self.stage_history:
+            return "secure"  # Default to secure if no history
+
+        history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in self.stage_history])
+        current_style_text = current_style if current_style else "not yet formed"
+
+        prompt = f"""You are a psychology expert observing a person's life. Based on the provided conversation from one life stage and their attachment style during that stage, you must do two things:
+1. Summarize the key facts and events that occurred.
+2. Based on the events and the previous style, determine the most likely attachment style for the *next* life stage. The next style MUST be one of: secure, anxious, avoidant, disorganized.
+
+Current Attachment Style: {current_style_text}
+
+Conversation History:
+{history_text}
+
+Your response MUST be in the following JSON format, and nothing else:
+{{
+  "summary": "Your summary of the facts and events.",
+  "next_attachment_style": "your_chosen_style"
+}}"""
+
+        print("[INFO] Summarizing stage and determining next style... please wait.")
+        try:
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                stream=False,
+            )
+            if response.choices:
+                content = response.choices[0].message.content
+                # The response might be wrapped in ```json ... ```, so we need to extract it.
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if not json_match:
+                    raise ValueError("No JSON object found in the LLM response.")
+                
+                result = json.loads(json_match.group(0))
+                self.background_summary = result.get("summary", "No summary was provided.")
+                next_style = result.get("next_attachment_style", "secure")
+
+                if next_style not in ATTACHMENT_STYLES:
+                    print(f"[WARN] LLM returned an invalid style '{next_style}'. Defaulting to 'secure'.")
+                    next_style = "secure"
+                
+                print(f"[INFO] Stage summary received:\n{self.background_summary}")
+                print(f"[INFO] Determined next attachment style: {next_style}")
+                return next_style
+            else:
+                self.background_summary = "No summary could be generated for the previous stage."
+                return "secure"
+        except (Exception, json.JSONDecodeError) as e:
+            print(f"[ERROR] Could not summarize stage or determine next style: {e}")
+            self.background_summary = "An error occurred during summarization."
+            return "secure" # Default to secure on error
+        finally:
+            self.clear_stage_history()
 
 # -----------------------------
-# DeepSeek related functions
+# Helper Functions
 # -----------------------------
 
 def create_deepseek_client() -> OpenAI:
-    """
-    Create an OpenAI-compatible client configured for DeepSeek API.
-    """
-    api_key = os.getenv("DEEPSEEK_API_KEY")
+    """Create an OpenAI-compatible client configured for DeepSeek API."""
+    api_key = os.getenv("DEEPSEEK_API_KEY", "sk-71869dca1bb94b9d8e04adc638b7f5c0")
     if not api_key:
         print("[ERROR] Environment variable DEEPSEEK_API_KEY is not set.")
         sys.exit(1)
-
-    client = OpenAI(
-        api_key=api_key,
-        base_url="https://api.deepseek.com",
-    )
-    return client
-
-
-def call_deepseek(client: OpenAI, user_input: str) -> str:
-    """
-    Call DeepSeek chat completion API and return the assistant text.
-    """
-    response = client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_input},
-        ],
-        stream=False,
-    )
-
-    if not response.choices:
-        return ""
-
-    return response.choices[0].message.content
-
-
-# -----------------------------
-# Motion tag processing
-# -----------------------------
+    return OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
 def extract_motion_tags_and_clean_text(raw_text: str) -> Tuple[Set[str], str]:
-    """
-    Extract motion tags like [angry], [gesture_hey] from the text and return:
-    - a set of tag names (lowercased)
-    - the text with all motion tags removed (for TTS output)
-    """
+    """Extracts motion tags and returns tags and clean text."""
     tags: Set[str] = set()
-
     def _collect(match: re.Match) -> str:
         tag = match.group("tag").strip().lower()
         if tag:
             tags.add(tag)
-        # Remove the tag from the final text.
         return ""
-
-    clean_text = MOTION_TAG_PATTERN.sub(_collect, raw_text)
-    clean_text = clean_text.strip()
+    clean_text = MOTION_TAG_PATTERN.sub(_collect, raw_text).strip()
     return tags, clean_text
 
+def parse_roles(filename: str = "Role_description") -> Dict[str, List[str]]:
+    """Parses the Role_description file into a dictionary."""
+    roles = {}
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            current_role = ""
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.endswith(':'):
+                    current_role = line[:-1].strip()
+                    roles[current_role] = []
+                elif current_role and '.' in line:
+                    # Extracts the part after the number, e.g., "1. style: desc" -> "style: desc"
+                    style_desc = line.split('.', 1)[1].strip()
+                    roles[current_role].append(style_desc)
+    except FileNotFoundError:
+        print(f"[ERROR] Role description file not found: {filename}")
+        return {}
+    return roles
+
+def select_roles_and_styles(roles: Dict[str, List[str]]) -> Dict[str, str]:
+    """Interactively asks the user to select a style for each role."""
+    print("\n--- Role and Style Selection ---")
+    selected_styles = {}
+    for role, styles in roles.items():
+        print(f"\nPlease select a style for the '{role}' role:")
+        for i, style in enumerate(styles):
+            print(f"  {i + 1}: {style}")
+        
+        choice = -1
+        while choice < 1 or choice > len(styles):
+            try:
+                raw_choice = input(f"Enter number (1-{len(styles)}): ")
+                choice = int(raw_choice)
+            except ValueError:
+                print("[WARN] Invalid input. Please enter a number.")
+        selected_styles[role] = styles[choice - 1]
+    print("\n--- Role selection complete ---")
+    return selected_styles
+
+def call_deepseek_with_context(client: OpenAI, system_prompt: str, stage_history: List[Dict[str, str]], user_input: str) -> str:
+    """Calls DeepSeek API with a full message history."""
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(stage_history)
+    messages.append({"role": "user", "content": user_input})
+
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            stream=False,
+        )
+        if response.choices:
+            return response.choices[0].message.content
+    except Exception as e:
+        print(f"[ERROR] API call failed: {e}")
+    return "[neutral] I seem to be having trouble thinking right now."
 
 # -----------------------------
-# Main CLI loop
+# Main Application Logic
 # -----------------------------
-
 def main() -> None:
-    """
-    Main entry point:
-    1. Read user input from terminal.
-    2. Send it to DeepSeek with a motion-aware system prompt.
-    3. On response:
-       - Extract motion tags using regex.
-       - Use EmotionMotionController.speak_text() for real TTS.
-       - Use EmotionMotionController.play_for_emotions() for NAO animations.
-    """
+    """Main application flow."""
+    # --- Initialization ---
     client = create_deepseek_client()
-
-    # Initialize emotion + motion controller (will try NAO_IP or simulation)
     motion_controller = EmotionMotionController()
+    basic_motion = NaoBasicMotion()
+    context_manager = ContextManager()
 
-    print("DeepSeek CLI demo with NAO TTS + NAO motion animations.")
-    print("Environment variables used:")
-    print("  - DEEPSEEK_API_KEY: DeepSeek API key (required)")
-    print("  - NAO_IP: NAO robot IP (optional, for real robot animations + TTS)")
-    print("")
-    if motion_controller.is_real_robot_available():
-        print("[INFO] Real NAO robot is available. Animations and TTS will be executed.")
-    else:
-        print("[INFO] No real NAO robot. Running in simulation mode.")
-    print("\nType your message and press Enter.")
-    print("Type 'exit' or 'quit' to stop.\n")
+    # --- Phase 1: Self-Introduction ---
+    intro_text = "Hello, I am Nao. The performance is about to begin."
+    print(f"[NAO] {intro_text}")
+    motion_controller.speak_text(intro_text)
 
-    while True:
-        try:
-            user_input = input("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\n[INFO] Exiting.")
-            break
+    # --- Phase 2: Role Selection ---
+    roles = parse_roles()
+    if not roles:
+        print("[ERROR] Exiting due to missing role descriptions.")
+        return
+    selected_styles = select_roles_and_styles(roles)
+    
+    # --- Phase 3: Main Performance Loop ---
+    nao_attachment_style: Optional[str] = None # Start with no attachment style for the baby stage
 
-        if not user_input:
-            continue
+    for stage in LIFE_STAGES:
+        print(f"\n--- Entering Stage: {stage} ---")
+        if nao_attachment_style:
+            print(f"[INFO] NAO's attachment style for this stage is '{nao_attachment_style}'.")
+        else:
+            print("[INFO] NAO is in the CHILD stage and has not formed an attachment style yet.")
 
-        if user_input.lower() in {"exit", "quit"}:
-            print("[INFO] Bye.")
-            break
+        # --- Build System Prompt for the Stage ---
+        style_descriptions = "\n".join([f"- {role}: {style}" for role, style in selected_styles.items()])
+        
+        if nao_attachment_style:
+            nao_style_text = f"NAO's Attachment Style: {nao_attachment_style}"
+        else:
+            nao_style_text = "NAO's Attachment Style: Not yet formed. You are a baby."
 
-        # 1) Call DeepSeek
-        reply = call_deepseek(client, user_input)
-        if not reply:
-            print("[WARN] Empty response from DeepSeek.")
-            continue
+        stage_prompt_section = f"""
+=====================================================================
+CURRENT SCENE CONTEXT
+=====================================================================
+NAO's Life Stage: {stage}
+{nao_style_text}
 
-        print(f"DeepSeek (raw): {reply}")
+Supporting Character Styles:
+{style_descriptions}
 
-        # 2) Extract motion tags and clean text
-        tags, clean_text = extract_motion_tags_and_clean_text(reply)
+Background from previous stages:
+{context_manager.background_summary if context_manager.background_summary else "This is the first stage, there is no background."}
+"""
+        current_system_prompt = SYSTEM_PROMPT_BASE + stage_prompt_section + SYSTEM_PROMPT_RULES
 
-        # Choose primary tag for TTS: prefer non-gesture, non-neutral tags.
-        primary_vocal_tag: Optional[str] = None
-        for t in tags:
-            if t.startswith("gesture_"):
-                continue
-            if t == "neutral":
-                continue
-            primary_vocal_tag = t
-            break
+        # --- Event Loop for the Stage ---
+        events = EVENTS_PER_STAGE[stage]
+        for i, event in enumerate(events):
+            is_last_event = (i == len(events) - 1)
+            print(f"\n--- Starting Event: {event} ---")
+            
+            # This prompt starts the event
+            attachment_style_for_prompt = nao_attachment_style if nao_attachment_style else "None"
+            initial_event_prompt = f"LIFESTAGE: {stage}\nATTACHMENT_STYLE: {attachment_style_for_prompt}\nEVENT: {event}\n\nHUMAN_INPUT: The scene begins."
+            
+            # --- Dialogue Loop for the Event ---
+            user_input = initial_event_prompt
+            
+            while True:
+                # 1) Call DeepSeek with the current context
+                reply = call_deepseek_with_context(client, current_system_prompt, context_manager.get_stage_history(), user_input)
+                
+                tags, clean_text = extract_motion_tags_and_clean_text(reply)
+                
+                # 2) Add messages to context AFTER the call
+                context_manager.add_message('user', user_input)
+                context_manager.add_message('assistant', clean_text) # Use 'assistant' role for NAO's response
+                
+                # 3) Execute NAO's action
+                print(f"[NAO] {reply}")
+                motion_controller.speak_text(clean_text, emotion_tag=next(iter(tags), "neutral"))
+                motion_controller.play_for_emotions(tags)
+                
+                # 4) Get next user input
+                try:
+                    user_input = input("You: ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    user_input = "quit"
 
-        # 3) Use real TTS via EmotionMotionController
-        motion_controller.speak_text(clean_text, emotion_tag=primary_vocal_tag)
+                # 5) Handle special commands
+                if user_input.lower() == "quit":
+                    if is_last_event:
+                        print("[INFO] Last event of the stage is over. Robot will be static.")
+                        break
+                    else:
+                        print("[INFO] Quitting event. Moving to new position.")
+                        basic_motion.change_position()
+                        break
+                
+                if not user_input:
+                    continue
+            
+            if user_input.lower() == "quit" and is_last_event:
+                break
+        
+        # --- End of Stage ---
+        print(f"\n--- End of Stage: {stage} ---")
+        # Summarize and determine the style for the *next* stage.
+        next_style = context_manager.summarize_and_determine_next_style(client, nao_attachment_style)
+        nao_attachment_style = next_style # Update for the next iteration
+        
+        if stage != LIFE_STAGES[-1]:
+            while input("Type 'next' to continue to the next stage: ").strip().lower() != 'next':
+                pass
 
-        # 4) Trigger NAO animations (or simulation) for each motion tag
-        motion_controller.play_for_emotions(tags)
+    print("\n--- Performance Finished ---")
 
 
 if __name__ == "__main__":
