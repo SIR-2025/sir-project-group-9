@@ -110,15 +110,14 @@ def create_openai_client() -> OpenAI:
     """
     load_dotenv()
     
-    #api_key = "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"
+    api_key = "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"
     #if not api_key:
     #    print("[ERROR] OPENAI_API_KEY not found in environment variables or .env file.")
     #    print("Please create a .env file with: OPENAI_API_KEY=sk-...")
     #    sys.exit(1)
 
     # Standard OpenAI client
-    return OpenAI(api_key="sk-3eda4326a3b64d19a50de249ea004278",
-                  base_url="https://api.deepseek.com",
+    return OpenAI(api_key="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",
                   )
 
 
@@ -192,7 +191,7 @@ def construct_base_system_prompt(motion_instructions: str, event_template: str, 
 def main() -> None:
     client = create_openai_client()
     motion_controller = EmotionMotionController()
-    stt_controller = VADWhisperSTT() # Initialize STT controller
+    stt_controller = VADWhisperSTT(client=client) # Initialize STT controller
 
     print("\n=== OPENAI GPT + NAO ROBOT SIMULATION (Multi-turn) ===")
     if motion_controller.is_real_robot_available():
@@ -236,7 +235,8 @@ def main() -> None:
         choice = input("Enter number: ").strip()
 
         if choice == '1':
-            intro_text = "Hello! I am a NAO robot. Today, I will take you on a journey through different stages of my life. You will play the role of my parent. Let's see how our story unfolds."
+            intro_text = "Hi I’m Nao, the parent simulation device that makes you go wow. Traumatize me, so your kids don't have to be."
+
             print(f"NAO (Intro): {intro_text}")
             motion_controller.play_for_emotions({'gesture_hey'}) # Perform greeting
             motion_controller.speak_text(intro_text, block=True) # Speak and wait
@@ -324,11 +324,11 @@ def main() -> None:
                 print("[Thinking] ...")
                 try:
                     response = client.chat.completions.create(
-                        #model="gpt-4o", ###############################################################################################
-                        model = "deepseek-chat",
+                        model="gpt-4o", ###############################################################################################
+                        #model = "deepseek-chat",
                         messages=messages,
                         temperature=0.7,
-                        max_tokens=100
+                        max_tokens=1000
                     )
                     robot_reply_raw = response.choices[0].message.content
                 except Exception as e:
@@ -368,8 +368,8 @@ def main() -> None:
                         try:
                             # One final generation for the closing remark
                             final_resp = client.chat.completions.create(
-                                #model="gpt-4o",####################################################################################################################################
-                                model = "deepseek-chat",
+                                model="gpt-4o",####################################################################################################################################
+                                #model = "deepseek-chat",
                                 messages=messages,
                                 temperature=0.7,
                                 max_tokens=60

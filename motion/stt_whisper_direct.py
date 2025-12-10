@@ -1,11 +1,13 @@
-import whisper
 import sounddevice as sd
 import numpy as np
 import collections
 import time
+import openai
+import os
+import io
+import soundfile as sf
 
 # --- Configuration ---
-MODEL_TYPE = "base.en"      # Whisper model type (e.g., "tiny.en", "base.en")
 SAMPLE_RATE = 16000         # Whisper requires 16k Hz
 CHANNELS = 1                # Mono audio
 BLOCK_SIZE = 2048           # Number of frames per buffer
@@ -13,26 +15,23 @@ BLOCK_SIZE = 2048           # Number of frames per buffer
 # --- VAD (Voice Activity Detection) Configuration ---
 VAD_THRESHOLD = 0.01        # RMS volume threshold to start recording. Adjust based on your mic sensitivity.
 VAD_PRE_BUFFER_S = 1        # Seconds of audio to keep before speech starts (to catch the beginning of words)
-VAD_POST_BUFFER_S = 1.5     # Seconds of silence to wait for before stopping recording
+VAD_POST_BUFFER_S = 0.7     # Seconds of silence to wait for before stopping recording
 
 class VADWhisperSTT:
     """
-    A Speech-To-Text class using Whisper, with Voice Activity Detection (VAD).
+    A Speech-To-Text class using OpenAI's Whisper API, with Voice Activity Detection (VAD).
 
     It automatically detects when a user starts speaking, records their speech,
-    and transcribes it after they stop talking.
+    and transcribes it after they stop talking using the OpenAI API.
     """
-    def __init__(self):
+    def __init__(self, client: openai.Client):
         """
-        Initializes the STT class, loading the Whisper model.
+        Initializes the STT class.
         """
-        print("[STT] Loading Whisper model...")
-        try:
-            self.model = whisper.load_model(MODEL_TYPE)
-            print(f"[STT] Whisper '{MODEL_TYPE}' model loaded.")
-        except Exception as e:
-            print(f"[STT] Error loading Whisper model: {e}")
-            raise
+        if not client:
+            raise ValueError("An OpenAI client must be provided.")
+        self.client = client
+        print("[STT] VADWhisperSTT initialized with OpenAI client.")
 
         # VAD state variables
         self.is_recording = False
@@ -108,9 +107,6 @@ class VADWhisperSTT:
                 blocksize=BLOCK_SIZE,
                 callback=self._process_audio_stream
             ):
-                # The stream runs in the background, processing audio via the callback.
-                # It will automatically stop when `sd.CallbackStop` is raised.
-                # We can sleep here until the callback signals it's done.
                 while self.is_recording or len(self.recorded_audio) == 0:
                     time.sleep(0.1)
         except sd.CallbackStop:
@@ -125,10 +121,27 @@ class VADWhisperSTT:
 
         print("[STT] Processing audio...")
         full_audio = np.concatenate(self.recorded_audio).flatten()
+        
+        # Save audio to an in-memory buffer as a FLAC file
+        try:
+            print("[STT] Compressing audio to FLAC in memory...")
+            audio_buffer = io.BytesIO()
+            sf.write(audio_buffer, full_audio, SAMPLE_RATE, format='FLAC')
+            audio_buffer.seek(0) # Rewind the buffer to the beginning
+            print("[STT] Audio compressed.")
+        except Exception as e:
+            print(f"[STT] Error creating in-memory audio buffer: {e}")
+            return ""
 
         try:
-            result = self.model.transcribe(full_audio, fp16=False)
-            transcript = result['text'].strip()
+            print("[STT] Sending audio to OpenAI API for transcription...")
+            # The API client needs a file-like object with a name
+            transcript_response = self.client.audio.transcriptions.create(
+              model="whisper-1", 
+              file=("audio.flac", audio_buffer)
+            )
+            print("[STT] Transcription received.")
+            transcript = transcript_response.text.strip()
 
             if transcript:
                 print(f"[STT] Heard: {transcript}")
@@ -142,11 +155,18 @@ class VADWhisperSTT:
 
 # --- Main execution for testing purposes ---
 if __name__ == '__main__':
-    print("This script demonstrates Whisper STT with Voice Activity Detection (VAD).")
+    print("This script demonstrates OpenAI Whisper STT with Voice Activity Detection (VAD).")
     print("It will automatically record when you speak and transcribe when you stop.")
     
     try:
-        stt = VADWhisperSTT()
+        # NOTE: You need to have your OPENAI_API_KEY in your environment variables
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not found.")
+            
+        client = openai.OpenAI(api_key=api_key)
+        stt = VADWhisperSTT(client=client)
+
         while True:
             print("\n--- Press Enter to start listening, or 'q' then Enter to quit ---")
             if input().lower() == 'q':
@@ -161,4 +181,4 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"\nAn error occurred: {e}")
         print("Please check microphone permissions and library installations.")
-        print("Required: pip install openai-whisper sounddevice numpy")
+        print("Required: pip install openai sounddevice numpy soundfile")
