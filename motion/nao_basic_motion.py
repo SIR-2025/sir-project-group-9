@@ -1,21 +1,18 @@
 # nao_basic_motion.py
 # -*- coding: utf-8 -*-
 """
-This script provides simple wrappers for basic NAO motions:
-- Spin in place (spin_in_place)
-- Lie down (lie_down)
-- A combined movement sequence (change_position)
+This script provides simple, REUSABLE wrappers for basic NAO motions.
+The functions are designed to be imported and used with an EXISTING Nao connection object.
 
-It also provides a command-line interactive menu.
-- Run `python nao_basic_motion.py` and select an action from the prompts.
+- spin_in_place(nao, turns, direction): Spin on the spot.
+- change_position(nao): A sequence of turning and walking.
 
-Dependencies:
-    pip install "social-interaction-cloud"
-And SIC must be installed and running on the NAO robot.
+This script can also be run directly for interactive testing.
 """
 
 import math
 import os
+import time
 from typing import Optional
 
 from sic_framework.devices import Nao
@@ -24,172 +21,131 @@ from sic_framework.devices.common_naoqi.naoqi_motion import (
     NaoPostureRequest,
 )
 
+# ------------------------------------------------------------------
+# Reusable Motion Functions (for import)
+# ------------------------------------------------------------------
 
-class NaoBasicMotion:
+def spin_in_place(nao: Nao, turns: float = 1.0, direction: str = "left") -> None:
     """
-    Provides simple high-level actions:
-      - spin_in_place: Spin on the spot.
-      - lie_down: Lie down on its back (LyingBack posture).
-      - change_position: A sequence of turning and walking.
-    """
+    Makes the NAO robot spin on the spot using an existing Nao object.
 
+    :param nao: An initialized and connected Nao object from the sic_framework.
+    :param turns: How many full rotations to make (e.g., 1.0 for 360°).
+    :param direction: "left" (counter-clockwise) or "right" (clockwise).
+    """
+    if not nao:
+        print("[ERROR] spin_in_place: Nao object is None.")
+        return
+    if turns == 0:
+        return
+
+    total_angle = 2.0 * math.pi * abs(turns)
+    if direction.lower() == "right":
+        total_angle = -total_angle
+
+    max_step = math.pi
+    remaining = total_angle
+
+    while abs(remaining) > 1e-3:
+        step = min(remaining, max_step) if remaining > 0 else max(remaining, -max_step)
+        move_req = NaoqiMoveToRequest(x=0.0, y=0.0, theta=step)
+        nao.motion.request(move_req)
+        remaining -= step
+        time.sleep(0.1) # Small delay between steps
+
+def change_position(nao: Nao) -> None:
+    """
+    A combination of moves using an existing Nao object:
+    1. Turn 90 degrees to the right.
+    2. Move forward 1 meter.
+    3. Turn 90 degrees to the left.
+    
+    :param nao: An initialized and connected Nao object from the sic_framework.
+    """
+    if not nao:
+        print("[ERROR] change_position: Nao object is None.")
+        return
+
+    print("[INFO] Starting 'change_position' sequence...")
+
+    print("[INFO] Step 1: Turning right 90 degrees.")
+    spin_in_place(nao, turns=0.25, direction="right")
+    time.sleep(0.5)
+
+    print("[INFO] Step 2: Moving forward 1 meter.")
+    move_req = NaoqiMoveToRequest(x=1.0, y=0.0, theta=0.0)
+    nao.motion.request(move_req)
+    time.sleep(0.5)
+
+    print("[INFO] Step 3: Turning left 90 degrees.")
+    spin_in_place(nao, turns=0.25, direction="left")
+
+    print("[INFO] 'change_position' sequence finished.")
+
+# ----------------------------------------------------------------------
+# Standalone Class & Interactive Menu (for testing)
+# ----------------------------------------------------------------------
+
+class NaoBasicMotionStandalone:
+    """
+    A standalone class for testing that creates its own Nao connection.
+    """
     def __init__(self, nao_ip: Optional[str] = None):
-        # Use NAO_IP from environment variables if available
         if nao_ip is None:
-            nao_ip = os.getenv("NAO_IP", "10.0.0.127")
-
+            nao_ip = os.getenv("NAO_IP", "10.0.0.137")
         self.nao_ip = nao_ip
         self.nao = Nao(ip=self.nao_ip)
 
-    # ------------------------------------------------------------------
-    # Spin in place
-    # ------------------------------------------------------------------
-    def spin_in_place(self, turns: float = 1.0, direction: str = "left") -> None:
-        """
-        Makes the NAO robot spin on the spot (rotation only, no translation).
-
-        :param turns: How many full rotations to make.
-                      1.0 = 360°
-                      0.5 = 180°
-                      0.25 = 90°, etc.
-        :param direction: "left" or "right"
-                           "left"  = counter-clockwise
-                           "right" = clockwise
-        """
-        if turns == 0:
-            return
-
-        total_angle = 2.0 * math.pi * abs(turns)
-
-        # Direction: left = positive angle, right = negative angle
-        if direction.lower() == "right":
-            total_angle = -total_angle
-
-        # The theta for NaoqiMoveToRequest must be in [-pi, pi], so we execute in steps.
-        max_step = math.pi  # Max rotation per step: 180°
-        remaining = total_angle
-
-        while abs(remaining) > 1e-3:
-            # The angle for this step, clamped to [-max_step, max_step]
-            if remaining > 0:
-                step = min(remaining, max_step)
-            else:
-                step = max(remaining, -max_step)
-
-            req = NaoqiMoveToRequest(x=0.0, y=0.0, theta=step)
-            self.nao.motion.request(req)
-
-            remaining -= step
-
-    # ------------------------------------------------------------------
-    # Lie down
-    # ------------------------------------------------------------------
     def lie_down(self, speed: float = 0.3) -> None:
-        """
-        Makes the NAO robot lie down (using the LyingBack predefined posture).
-
-        :param speed: The speed of the posture change (0.0 - 1.0). Recommended: 0.2-0.5.
-        """
         req = NaoPostureRequest("LyingBack", speed)
         self.nao.motion.request(req)
 
-    # ------------------------------------------------------------------
-    # Change position (New combined action)
-    # ------------------------------------------------------------------
-    def change_position(self) -> None:
-        """
-        A combination of moves:
-        1. Turn 90 degrees to the right.
-        2. Move forward 1.5 meters.
-        3. Turn 90 degrees to the left.
-        """
-        print("[INFO] Starting 'change_position' sequence...")
+    def sit_on_chair(self, speed: float = 0.3) -> None:
+        req = NaoPostureRequest("SitOnChair", speed)
+        self.nao.motion.request(req)
 
-        # 1. Turn left 90 degrees
-        print("[INFO] Step 1: Turning right 90 degrees.")
-        self.spin_in_place(turns=0.25, direction="right")
-
-        # 2. Move forward 1.5 meters
-        print("[INFO] Step 2: Moving forward 1.5 meters.")
-        # NaoqiMoveToRequest uses meters for x and y
-        move_req = NaoqiMoveToRequest(x=1, y=0.0, theta=0.0)
-        self.nao.motion.request(move_req)
-
-        # 3. Turn right 90 degrees
-        print("[INFO] Step 3: Turning left 90 degrees.")
-        self.spin_in_place(turns=0.25, direction="left")
-
-        print("[INFO] 'change_position' sequence finished.")
-
-
-# ----------------------------------------------------------------------
-# Interactive command-line menu
-# ----------------------------------------------------------------------
 def interactive_menu() -> None:
     """
-    Run an interactive menu when this file is executed:
-        1 -> Spin in place
-        2 -> Lie down
-        3 -> Change position (sequence)
-        q -> Quit
+    Run an interactive menu for direct testing of this script.
     """
-    motion = NaoBasicMotion()
-    print(f"[INFO] Connected to Nao at {motion.nao_ip}")
-    print("[INFO] Interactive mode: select an action for NAO to perform.")
+    motion_standalone = NaoBasicMotionStandalone()
+    nao_instance = motion_standalone.nao
+    print(f"[INFO] Connected to Nao at {motion_standalone.nao_ip} for interactive testing.")
 
     while True:
         print("\n===== NAO Basic Motion Menu =====")
         print("1) Spin in place")
         print("2) Lie down (LyingBack)")
         print("3) Change Position (sequence)")
+        print("4) Sit on chair (SitOnChair)")
         print("q) Quit")
-        choice = input("Enter option (1/2/3/q): ").strip().lower()
+        choice = input("Enter option: ").strip().lower()
 
         if choice == "1":
-            # Let user choose turns and direction, with defaults
-            turns_input = input("How many turns? (default 1.0): ").strip()
-            dir_input = input("Direction: left or right? (default left): ").strip().lower()
-
-            if not turns_input:
-                turns = 1.0
-            else:
-                try:
-                    turns = float(turns_input)
-                except ValueError:
-                    print("[WARN] Turns must be a number, using default 1.0.")
-                    turns = 1.0
-
-            if dir_input not in {"left", "right"}:
-                dir_input = "left"
-
-            print(f"[INFO] NAO spinning in place: {turns} turns, direction: {dir_input}")
-            motion.spin_in_place(turns=turns, direction=dir_input)
-
+            turns = float(input("How many turns? (default 1.0): ") or 1.0)
+            direction = input("Direction: left or right? (default left): ").strip().lower() or "left"
+            print(f"[INFO] NAO spinning in place...")
+            spin_in_place(nao_instance, turns=turns, direction=direction)
+        
         elif choice == "2":
-            speed_input = input("Lie down speed (0.0 - 1.0, default 0.3): ").strip()
-            if not speed_input:
-                speed = 0.3
-            else:
-                try:
-                    speed = float(speed_input)
-                except ValueError:
-                    print("[WARN] Speed must be a number, using default 0.3.")
-                    speed = 0.3
-
-            print(f"[INFO] NAO lying down (LyingBack) with speed={speed}...")
-            motion.lie_down(speed=speed)
+            speed = float(input("Lie down speed (0.0 - 1.0, default 0.3): ") or 0.3)
+            print(f"[INFO] NAO lying down...")
+            motion_standalone.lie_down(speed=speed)
 
         elif choice == "3":
             print("[INFO] NAO executing 'change_position' sequence...")
-            motion.change_position()
+            change_position(nao_instance)
+
+        elif choice == "4":
+            speed = float(input("SitOnChair speed (0.0 - 1.0, default 0.3): ") or 0.3)
+            print(f"[INFO] NAO going to 'SitOnChair' posture...")
+            motion_standalone.sit_on_chair(speed=speed)
 
         elif choice == "q":
             print("[INFO] Exiting program.")
             break
-
         else:
-            print("[WARN] Invalid option, please enter 1, 2, 3, or q.")
-
+            print("[WARN] Invalid option.")
 
 if __name__ == "__main__":
     interactive_menu()

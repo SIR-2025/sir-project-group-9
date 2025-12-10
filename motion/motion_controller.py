@@ -6,6 +6,7 @@ import re
 from typing import Optional, Set
 
 import emo_list  # contains MotionAnimationsApp and ALL_ANIMATIONS
+import nao_basic_motion # Import the refactored basic motion functions
 
 # Import NAO TTS request type (same as in demo_nao_talk.py)
 from sic_framework.devices.common_naoqi.naoqi_text_to_speech import (
@@ -25,7 +26,7 @@ class EmotionMotionController:
 
     def __init__(
         self,
-        nao_ip: Optional[str] = "10.0.0.127",
+        nao_ip: Optional[str] = "10.0.0.137",
         auto_stand: bool = True,
         enable_simulation: bool = True,
     ) -> None:
@@ -129,7 +130,7 @@ class EmotionMotionController:
     # TTS (real or simulated)
     # ------------------------------------------------------------------
 
-    def speak_text(self, text: str, emotion_tag: Optional[str] = None) -> None:
+    def speak_text(self, text: str, emotion_tag: Optional[str] = None, block: bool = False) -> None:
         """
         Use NAO's built-in TTS to say the given text.
         If NAO is unavailable, fall back to printing a simulated TTS line.
@@ -137,6 +138,7 @@ class EmotionMotionController:
         :param text: The text that NAO should say.
         :param emotion_tag: Optional motion/emotion tag (e.g. "angry", "sad").
                             If provided, we may enable animated TTS.
+        :param block: If True, wait for the speech to complete before returning.
         """
         if not text:
             return
@@ -155,9 +157,9 @@ class EmotionMotionController:
                 )
                 # Same pattern as in demo_nao_talk.py:
                 # self.nao.tts.request(NaoqiTextToSpeechRequest("Hello ...", animated=True))
-                self.app.nao.tts.request(
-                    NaoqiTextToSpeechRequest(modified_text, animated=animated)
-                )
+                request = NaoqiTextToSpeechRequest(modified_text, animated=animated)
+                self.app.nao.tts.request(request, block=block)
+
             except Exception as exc:  # pylint: disable=broad-except
                 print(f"[TTS] Error while sending TTS request: {exc}")
             return
@@ -219,3 +221,23 @@ class EmotionMotionController:
                 )
             else:
                 print("[MOTION] Robot is not available and simulation is disabled.")
+
+    # ------------------------------------------------------------------
+    # Special high-level actions
+    # ------------------------------------------------------------------
+
+    def perform_wrap_up_action(self) -> None:
+        """
+        Performs the wrap-up action by calling the change_position function.
+        This is intended to be called at the end of a scene.
+        """
+        if self.is_real_robot_available():
+            print("[MOTION] Performing wrap-up action 'change_position'.")
+            try:
+                # Pass the existing Nao connection object to the refactored function
+                nao_basic_motion.change_position(self.app.nao)
+            except Exception as e:
+                print(f"[MOTION] Error during wrap-up action: {e}")
+        else:
+            # If no real robot, simulate the action
+            print("[MOTION][SIM] Would perform 'change_position' sequence as wrap-up action.")

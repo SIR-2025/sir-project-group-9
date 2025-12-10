@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 # Import the provided motion controller
 from motion_controller import EmotionMotionController
+from stt_whisper_direct import VADWhisperSTT
 
 # -----------------------------
 # Configuration & File Paths
@@ -21,17 +22,17 @@ from motion_controller import EmotionMotionController
 # Mapping stage names to the uploaded JSON filenames
 JSON_FILES = {
     "baby": {
-        "behaviour": "/home/urchin/Documents/Projects/sir-project-group-9/llm_prompts/behaviour/baby_behaviour.json",
-        "description": "/home/urchin/Documents/Projects/sir-project-group-9/llm_prompts/description/baby_description.json"
+        "behaviour": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\behaviour\\baby_behaviour.json",
+        "description": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\description\\baby_description.json"
     },
     "child": {
-        "behaviour": "/home/urchin/Documents/Projects/sir-project-group-9/llm_prompts/behaviour/child_behaviour.json",
+        "behaviour": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\behaviour\\child_behaviour.json",
         # Note: Preserving the typo 'desription' found in your uploaded file name
-        "description": "/home/urchin/Documents/Projects/sir-project-group-9/llm_prompts/description/child_desription.json" 
+        "description": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\description\\child_desription.json" 
     },
     "teen": {
-        "behaviour": "/home/urchin/Documents/Projects/sir-project-group-9/llm_prompts/behaviour/teen_behaviour.json",
-        "description": "/home/urchin/Documents/Projects/sir-project-group-9/llm_prompts/description/teen_description.json"
+        "behaviour": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\behaviour\\teen_behaviour.json",
+        "description": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\description\\teen_description.json"
     }
 }
 
@@ -70,11 +71,33 @@ GUIDELINES:
 4. Keep your spoken response consistent with the restrictions of the life stage (e.g., a baby speaks in single words, a teen acts rebellious).
 """
 
+# Specialized prompt for the Baby stage
+BABY_MOTION_SYSTEM_PROMPT = """
+You are roleplaying as a BABY controlling a NAO robot. You can only express basic emotions.
+
+To express how you feel, you MUST use ONE of the following MOTION TAGS at the start of your response.
+
+FORMAT:
+[motion_tag] Your spoken response (usually just one or two simple words).
+
+AVAILABLE EMOTION TAGS:
+[Fear]
+[Hurt]
+[Sad]
+[Excited]
+[neutral] (Use this if you are calm or just observing)
+
+GUIDELINES:
+1. CHOOSE ONLY ONE TAG from the list above.
+2. Your spoken words should be very simple, like "Mama," "Dada," "toy," "no," "want."
+3. Do NOT use any other tags or gestures.
+"""
+
 # -----------------------------
 # Regex for motion tags
 # -----------------------------
 
-MOTION_TAG_PATTERN = re.compile(r"\[(?P<tag>[a-zA-Z_]+)\]")
+MOTION_TAG_PATTERN = re.compile(r"""\[(?P<tag>[a-zA-Z_]+)\]""")
 
 # -----------------------------
 # Helper Functions
@@ -87,14 +110,16 @@ def create_openai_client() -> OpenAI:
     """
     load_dotenv()
     
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        print("[ERROR] OPENAI_API_KEY not found in environment variables or .env file.")
-        print("Please create a .env file with: OPENAI_API_KEY=sk-...")
-        sys.exit(1)
+    #api_key = "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"
+    #if not api_key:
+    #    print("[ERROR] OPENAI_API_KEY not found in environment variables or .env file.")
+    #    print("Please create a .env file with: OPENAI_API_KEY=sk-...")
+    #    sys.exit(1)
 
     # Standard OpenAI client
-    return OpenAI(api_key=api_key)
+    return OpenAI(api_key="sk-3eda4326a3b64d19a50de249ea004278",
+                  base_url="https://api.deepseek.com",
+                  )
 
 
 def load_json_data(stage_name: str) -> Tuple[Dict, Dict]:
@@ -146,7 +171,7 @@ def construct_base_system_prompt(motion_instructions: str, event_template: str, 
     Creates the initial system message for the chat history.
     """
     # 1. Inject the specific scene description
-    scenario_prompt = re.sub(r"\{\{.*?DESCRIPTION\}\}", scene_context, event_template)
+    scenario_prompt = re.sub(r"""\{\{.*?DESCRIPTION\}\}""", scene_context, event_template)
     
     # 2. Add life memory context
     memory_str = life_memory if life_memory else "(none yet)"
@@ -155,7 +180,7 @@ def construct_base_system_prompt(motion_instructions: str, event_template: str, 
     # 3. Combine with motion instructions
     full_system_prompt = (
         f"{motion_instructions}\n\n"
-        f"--- CURRENT SCENE CONTEXT ---\n"
+        f"--- CURRENT SCENE CONTEXT ---"
         f"{scenario_prompt}\n"
     )
     return full_system_prompt
@@ -167,6 +192,7 @@ def construct_base_system_prompt(motion_instructions: str, event_template: str, 
 def main() -> None:
     client = create_openai_client()
     motion_controller = EmotionMotionController()
+    stt_controller = VADWhisperSTT() # Initialize STT controller
 
     print("\n=== OPENAI GPT + NAO ROBOT SIMULATION (Multi-turn) ===")
     if motion_controller.is_real_robot_available():
@@ -202,7 +228,29 @@ def main() -> None:
     
     print(f"Selected: {parent_role}")
 
-    # 3. Life Stages Loop
+    # 3. Pre-performance Menu
+    while True:
+        print("\n--- CHOOSE AN ACTION ---")
+        print("1. Self-introduction and performance introduction")
+        print("0. Start performance")
+        choice = input("Enter number: ").strip()
+
+        if choice == '1':
+            intro_text = "Hello! I am a NAO robot. Today, I will take you on a journey through different stages of my life. You will play the role of my parent. Let's see how our story unfolds."
+            print(f"NAO (Intro): {intro_text}")
+            motion_controller.play_for_emotions({'gesture_hey'}) # Perform greeting
+            motion_controller.speak_text(intro_text, block=True) # Speak and wait
+            print("[System] Introduction finished.")
+        
+        elif choice == '0':
+            print("[System] Starting performance...")
+            break # Exit menu and start the main loop
+        
+        else:
+            print("Invalid selection. Please enter 0 or 1.")
+
+
+    # 4. Life Stages Loop
     stages = ["baby", "child", "teen"]
     life_memory_log = [] 
 
@@ -236,8 +284,16 @@ def main() -> None:
             
             # Initialize Chat History for this event
             prompt_template = event_info.get("user_prompt_template", "")
+            
+            # Select the appropriate motion prompt based on the stage
+            current_motion_prompt = (
+                BABY_MOTION_SYSTEM_PROMPT 
+                if stage_name == "baby" 
+                else MOTION_SYSTEM_PROMPT
+            )
+            
             base_system_prompt = construct_base_system_prompt(
-                MOTION_SYSTEM_PROMPT,
+                current_motion_prompt,
                 prompt_template,
                 scene_description,
                 str(life_memory_log)
@@ -249,10 +305,12 @@ def main() -> None:
             event_active = True
             
             while event_active:
-                # A. Get User Dialogue
-                user_dialogue = input("\nYou (Dialogue): ").strip()
+                # A. Get User Dialogue via STT
+                print("\nYou (Speak now):")
+                user_dialogue = stt_controller.listen_and_transcribe()
+                
                 if not user_dialogue:
-                    print("Please say something.")
+                    print("Could not hear anything. Please try again.")
                     continue
                     
                 if user_dialogue.lower() in ["quit", "exit"]:
@@ -266,7 +324,8 @@ def main() -> None:
                 print("[Thinking] ...")
                 try:
                     response = client.chat.completions.create(
-                        model="gpt-4o", 
+                        #model="gpt-4o", ###############################################################################################
+                        model = "deepseek-chat",
                         messages=messages,
                         temperature=0.7,
                         max_tokens=100
@@ -309,7 +368,8 @@ def main() -> None:
                         try:
                             # One final generation for the closing remark
                             final_resp = client.chat.completions.create(
-                                model="gpt-4o",
+                                #model="gpt-4o",####################################################################################################################################
+                                model = "deepseek-chat",
                                 messages=messages,
                                 temperature=0.7,
                                 max_tokens=60
@@ -319,8 +379,13 @@ def main() -> None:
                             
                             print(f"NAO (Closing): {f_spoken}")
                             
-                            motion_controller.speak_text(f_spoken, emotion_tag="neutral")
+                            # Make this call blocking to wait for speech to finish
+                            motion_controller.speak_text(f_spoken, emotion_tag="neutral", block=True)
                             motion_controller.play_for_emotions(f_tags)
+
+                            # Wait for speech to finish, then perform the final action
+                            print("[System] Wrap-up speech finished. Performing final action.")
+                            motion_controller.perform_wrap_up_action()
                             
                             # Save interaction summary to life memory
                             # We summarize the last assistant message as the result

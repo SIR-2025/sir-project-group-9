@@ -277,7 +277,7 @@ class MotionAnimationsApp(object):
                         print("  -", m)
                     continue
                 else:
-                    print("[WARN] Could not find an animation with a name containing '{}'.”.format(user_input))
+                    print("[WARN] Could not find an animation with a name containing '{}'.".format(user_input))
                     continue
 
             if anim_name:
@@ -337,7 +337,7 @@ def main():
             if 0 <= idx < len(ALL_ANIMATIONS):
                 app.play_animation(ALL_ANIMATIONS[idx])
             else:
-                print("[WARN] Index out of range 0-{}.”.format(len(ALL_ANIMATIONS) - 1))
+                print("[WARN] Index out of range 0-{}.".format(len(ALL_ANIMATIONS) - 1))
         elif user_input.startswith("animations/"):
             if user_input in ALL_ANIMATIONS:
                 app.play_animation(user_input)
@@ -355,7 +355,7 @@ def main():
                 for m in matches:
                     print("  -", m)
             else:
-                print("[WARN] Could not find an animation with a name containing '{}'.”.format(user_input))
+                print("[WARN] Could not find an animation with a name containing '{}'.".format(user_input))
     else:
         # Enter interactive loop
         app.interactive_loop()

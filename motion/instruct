@@ -1,0 +1,12 @@
+很好，现在有一个综合的任务：
+1. 当main运行时，会有几个阶段，第一个阶段是自我介绍，第二个阶段是进入我们预设的life cycle的表演。
+
+2. 当进入表演时，第一部分是选择角色，角色信息在Role_description。系统应该逐个询问每个角色选定的style
+
+在角色选定结束后我们开始正式表演，从baby stage开始。按照顺序表演每一个event。event进行时应该确保主程序运行，当我在终端里输入quit时，调用basic motion里的change position。当一个staeg的所有event都结束时（也就是当我在stage的最后一个event输入quit后），应该保持静态，直到我输入next的时候再开始下一个stage
+
+现在请更新main文件以适配上面的流程，但是不要改动现有的功能
+
+3. 此外，我们还需要写一个上下文管理窗口。 从一开始，每一个对话都应该放进一个字典,例如{{role:**,content:**},{role:**,content:**}}。然后每一个stage是一个独立字典。当stage结束后，应该向deepseek发送本stage的所有信息，并配要求“please summerize the facts and things happened in the given dictionary}”，然后把这个作为背景信息加入到下一个stage的上下文字典。
+
+注意，在event内部，对话进行时，每次发送除了当前的用户的输入，还有本stage的对话字典里的所有内容以达到chat记忆管理的效果。
