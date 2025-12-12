@@ -417,7 +417,7 @@ def main() -> None:
         if stage_name == "baby":
             motion_controller.go_to_crouch()
         elif stage_name == "adult":
-            motion_controller.go_to_lying_back()
+            motion_controller.go_to_lying_back(speed=1.0)
         elif stage_name == "elderly":
             motion_controller.go_to_sit_relax()
 
@@ -478,6 +478,9 @@ def main() -> None:
             )
             
             messages = [{"role": "system", "content": base_system_prompt}]
+            if stage_name in ("adult", "elderly") and life_memory_log:
+                memory_text = "\n".join(life_memory_log)
+                messages.append({"role": "system", "content": f"PAST REFLECTIONS:\n{memory_text}"})
 
             # Robot opens the scene with a first line
             opening_instruction = {
@@ -518,7 +521,7 @@ def main() -> None:
                 if stage_name == "baby":
                     motion_controller.go_to_crouch()
                 elif stage_name == "adult":
-                    motion_controller.go_to_lying_back()
+                    motion_controller.go_to_lying_back(speed=1.0)
                 elif stage_name == "elderly":
                     motion_controller.go_to_sit_relax()
             except Exception as e:
@@ -579,7 +582,7 @@ def main() -> None:
                 if stage_name == "baby":
                     motion_controller.go_to_crouch()
                 elif stage_name == "adult":
-                    motion_controller.go_to_lying_back()
+                    motion_controller.go_to_lying_back(speed=1.0)
                 elif stage_name == "elderly":
                     motion_controller.go_to_sit_relax()
 
@@ -624,7 +627,7 @@ def main() -> None:
                                 if is_last_event:
                                     motion_controller.go_to_stand()
                                 else:
-                                    motion_controller.go_to_lying_back()
+                                    motion_controller.go_to_lying_back(speed=1.0)
                             elif stage_name == "elderly":
                                 # For elderly, stay low; final shutdown will move to LyingBelly.
                                 pass
@@ -647,14 +650,14 @@ def main() -> None:
                                 if is_last_event:
                                     motion_controller.go_to_stand()
                                 else:
-                                    motion_controller.go_to_lying_back()
+                                    motion_controller.go_to_lying_back(speed=1.0)
                             elif stage_name == "elderly":
                                 # After final shutdown, remain in LyingBelly; do not reset to sit or stand.
                                 pass
 
                             # Save interaction summary to life memory
-                            # We summarize the last assistant message as the result
-                            life_memory_log.append(f"Stage: {stage_name} | Event: {event_key} | Result: Interaction completed.")
+                            summary_text = f"Stage: {stage_name} | Event: {event_key} | Scene: {scene_description} | Outcome: {f_spoken}"
+                            life_memory_log.append(summary_text)
                             
                         except Exception as e:
                             print(f"[ERROR] Failed to wrap up: {e}")
