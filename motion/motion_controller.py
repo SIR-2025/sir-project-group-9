@@ -178,6 +178,7 @@ class EmotionMotionController:
         """
         if not text:
             return
+        start_ts = time.perf_counter()
 
         # Choose whether to use animated TTS based on whether we have an emotion.
         animated = emotion_tag is not None and not emotion_tag.startswith("gesture_")
@@ -208,6 +209,9 @@ class EmotionMotionController:
                 print(f"[TTS][SIM] {modified_text}")
         else:
             print("[TTS] Robot is not available and simulation is disabled.")
+
+        elapsed = time.perf_counter() - start_ts
+        print(f"[TIMER][TTS] Duration: {elapsed:.2f}s")
 
     # ------------------------------------------------------------------
     # Motion playback for a set of tags

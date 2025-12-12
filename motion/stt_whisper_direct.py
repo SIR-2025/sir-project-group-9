@@ -92,6 +92,7 @@ class VADWhisperSTT:
         Listens for speech using VAD and returns the transcribed text.
         This is a blocking function.
         """
+        start_ts = time.perf_counter()
         self.recorded_audio = []
         self.pre_buffer.clear()
         self.is_recording = False
@@ -145,12 +146,18 @@ class VADWhisperSTT:
 
             if transcript:
                 print(f"[STT] Heard: {transcript}")
+                elapsed = time.perf_counter() - start_ts
+                print(f"[TIMER][STT] Total latency: {elapsed:.2f}s")
                 return transcript
             else:
                 print("[STT] Could not understand audio or speech was empty.")
+                elapsed = time.perf_counter() - start_ts
+                print(f"[TIMER][STT] Total latency: {elapsed:.2f}s")
                 return ""
         except Exception as e:
             print(f"[STT] Transcription failed: {e}")
+            elapsed = time.perf_counter() - start_ts
+            print(f"[TIMER][STT] Total latency (failed): {elapsed:.2f}s")
             return ""
 
 # --- Main execution for testing purposes ---
