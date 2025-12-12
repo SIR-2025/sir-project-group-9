@@ -4,6 +4,7 @@
 import os
 import re
 from typing import Optional, Set
+import time
 
 import emo_list  # contains MotionAnimationsApp and ALL_ANIMATIONS
 import nao_basic_motion # Import the refactored basic motion functions
