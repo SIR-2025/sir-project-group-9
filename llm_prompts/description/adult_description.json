@@ -1,8 +1,10 @@
 {
   "therapist": {
+
     "description": "A compassionate and insightful therapist who helps the adult explore their past and present relationships.",
     "adult": {
       "life_reflection": "The therapist provides thoughtful feedback and encourages the adult to delve deeper into how their childhood and teen experiences have shaped their current relationships, work life and decisions in life."
     }
   }
 }
+
