@@ -432,8 +432,14 @@ def main() -> None:
         events_map = beh_data.get(stage_name, {}).get("events", {})
         event_items = list(events_map.items())
         
+        force_stage_end = False
+
         for event_idx, (event_key, event_info) in enumerate(event_items):
             is_last_event = event_idx == len(event_items) - 1
+            if stage_name == "baby" and event_key == "first_words":
+                # Treat first_words as the final baby event
+                is_last_event = True
+                force_stage_end = True
             print(f"\n--- Scene: {event_key} ---")
             
             # Determine Scene Description
@@ -628,6 +634,9 @@ def main() -> None:
                             try:
                                 if stage_name == "elderly" and is_last_event:
                                     motion_controller.perform_elderly_shutdown()
+                                elif stage_name == "baby":
+                                    # Always spin for baby stage transitions
+                                    motion_controller.perform_wrap_up_action(use_spin=True)
                                 else:
                                     motion_controller.perform_wrap_up_action(use_spin=is_last_event)
                             except Exception as motion_err:  # pylint: disable=broad-except
@@ -658,6 +667,8 @@ def main() -> None:
             
             # --- END OF EVENT LOOP ---
             time.sleep(1.0)
+            if force_stage_end:
+                break
 
     print("\n=== Simulation Complete ===")
     print("Final Life Memory:")
