@@ -20,6 +20,7 @@ from stt_whisper_direct import VADWhisperSTT
 # -----------------------------
 
 # Mapping stage names to the uploaded JSON filenames
+# This peer-only runner only uses child + teen stages, but we keep the full mapping for consistency.
 JSON_FILES = {
     "baby": {
         "behaviour": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\behaviour\\baby_behaviour.json",
@@ -27,8 +28,7 @@ JSON_FILES = {
     },
     "child": {
         "behaviour": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\behaviour\\child_behaviour.json",
-        # Note: Preserving the typo 'desription' found in your uploaded file name
-        "description": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\description\\child_desription.json" 
+        "description": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\description\\child_desription.json"
     },
     "teen": {
         "behaviour": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\behaviour\\teen_behaviour.json",
@@ -42,6 +42,12 @@ JSON_FILES = {
         "behaviour": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\behaviour\\elderly_behaviour.json",
         "description": r"D:\\研二\\代码文件\\SIC\\sir-project-group-9\\llm_prompts\\description\\elderly_description.json"
     }
+}
+
+# Allowed events for this peer-focused runner
+ALLOWED_EVENTS = {
+    "child": {"peer_interaction"},
+    "teen": {"peer_conflict"},
 }
 
 # -----------------------------
@@ -118,14 +124,14 @@ def create_openai_client() -> OpenAI:
     """
     load_dotenv()
     
-    api_key = ""
+    api_key = "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"
     #if not api_key:
     #    print("[ERROR] OPENAI_API_KEY not found in environment variables or .env file.")
     #    print("Please create a .env file with: OPENAI_API_KEY=sk-...")
     #    sys.exit(1)
 
     # Standard OpenAI client
-    return OpenAI(api_key="",
+    return OpenAI(api_key="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",
                   )
 
 
@@ -311,19 +317,6 @@ def main() -> None:
     motion_controller = EmotionMotionController()
     stt_controller = VADWhisperSTT(client=client) # Initialize STT controller
 
-    # Pre-warm LLM to reduce first-turn latency
-    try:
-        print("[INFO] Warming up LLM for faster first response...")
-        _ = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "system", "content": "Warmup ping for latency reduction."},
-                      {"role": "user", "content": "Say OK."}],
-            max_tokens=4,
-            temperature=0.0
-        )
-    except Exception as warm_err:  # pylint: disable=broad-except
-        print(f"[WARN] LLM warmup skipped due to error: {warm_err}")
-
     print("\n=== OPENAI GPT + NAO ROBOT SIMULATION (Multi-turn) ===")
     if motion_controller.is_real_robot_available():
         print("[INFO] Connected to REAL NAO Robot.")
@@ -340,24 +333,18 @@ def main() -> None:
         print("[CRITICAL] Could not load configuration. Exiting.")
         return
 
-    # 2. Role Selection
+    # 2. Role Selection (peer-focused run only needs peer; keep parent for safety)
     role_sources = [d_data, child_desc, teen_desc]
-    adult_desc = load_json_data("adult")[1]
-    elderly_desc = load_json_data("elderly")[1]
-    role_sources.extend([adult_desc, elderly_desc])
     parent_options = collect_roles_by_type(role_sources, "parent")
-    teacher_options = collect_roles_by_type(role_sources, "teacher")
     peer_options = collect_roles_by_type(role_sources, "peer")
     allowed_peers = {"bully_peer", "ignoring_peer", "friend_peer"}
     peer_options = [p for p in peer_options if p in allowed_peers] or list(allowed_peers)
-    therapist_options = collect_roles_by_type(role_sources, "therapist")
-    caregiver_options = collect_roles_by_type(role_sources, "caregiver")
 
     parent_role = prompt_role_selection("parent", parent_options)
-    teacher_role = prompt_role_selection("teacher", teacher_options)
+    teacher_role = "gentle_teacher"  # unused placeholder
     peer_role = prompt_role_selection("peer", peer_options)
-    therapist_role = prompt_role_selection("therapist", therapist_options)
-    caregiver_role = prompt_role_selection("caregiver", caregiver_options)
+    therapist_role = ""
+    caregiver_role = ""
 
     # 3. Pre-performance Menu
     while True:
@@ -382,29 +369,11 @@ def main() -> None:
             print("Invalid selection. Please enter 0 or 1.")
 
 
-    # 4. Select starting life stage (then continue sequentially)
-    stages = ["baby", "child", "teen", "adult", "elderly"]
-    print("\n--- SELECT STARTING LIFE STAGE ---")
-    for idx, stg in enumerate(stages):
-        print(f"{idx + 1}. {stg}")
-
-    start_stage = stages[0]
-    while True:
-        sel = input("Enter number to choose starting stage: ").strip()
-        if sel.isdigit():
-            idx = int(sel) - 1
-            if 0 <= idx < len(stages):
-                start_stage = stages[idx]
-                break
-        print("Invalid selection, please try again.")
-
-    start_index = stages.index(start_stage)
-    print(f"[System] Performance will start from: {start_stage.upper()}")
-
-    # 5. Life Stages Loop
+    # 4. Life Stages Loop
+    stages = ["child", "teen"]
     life_memory_log = [] 
 
-    for stage_name in stages[start_index:]:
+    for stage_name in stages:
         print(f"\n\n{'#'*40}")
         print(f"ENTERING LIFE STAGE: {stage_name.upper()}")
         print(f"{'#'*40}")
@@ -412,25 +381,13 @@ def main() -> None:
         beh_data, desc_data = load_json_data(stage_name)
         if not beh_data:
             continue
-
-        # Stage posture management at entry
-        if stage_name == "baby":
-            motion_controller.go_to_crouch()
-        elif stage_name == "adult":
-            motion_controller.go_to_lying_back()
-        elif stage_name == "elderly":
-            motion_controller.go_to_sit_relax()
-
-        # Preview full stage prompt for transparency
-        stage_motion_prompt = (
-            BABY_MOTION_SYSTEM_PROMPT if stage_name == "baby" else MOTION_SYSTEM_PROMPT
-        )
-        print("\n--- FULL STAGE PROMPT ---")
-        print(stage_motion_prompt)
-        print("--- END STAGE PROMPT ---\n")
         
         events_map = beh_data.get(stage_name, {}).get("events", {})
-        event_items = list(events_map.items())
+        # Filter only allowed events for this stage
+        allowed = ALLOWED_EVENTS.get(stage_name, set())
+        event_items = [
+            (k, v) for k, v in events_map.items() if (not allowed or k in allowed)
+        ]
         
         for event_idx, (event_key, event_info) in enumerate(event_items):
             is_last_event = event_idx == len(event_items) - 1
@@ -478,12 +435,6 @@ def main() -> None:
                 "role": "system",
                 "content": "Begin this scene with a brief opening line before the user speaks. Use exactly one motion tag as the first token."
             }
-            # If child stage, inject salutation reference
-            if stage_name == "child":
-                if event_key == "school_day":
-                    opening_instruction["content"] += " Mention mom in this first line."
-                elif event_key == "learning_with_teacher":
-                    opening_instruction["content"] += " Mention teacher in this first line."
             messages.append(opening_instruction)
 
             try:
@@ -509,12 +460,6 @@ def main() -> None:
                     motion_controller.play_for_emotions(o_tags)
                 except Exception as motion_err:  # pylint: disable=broad-except
                     print(f"[MOTION] Skipped opener motion due to error: {motion_err}")
-                if stage_name == "baby":
-                    motion_controller.go_to_crouch()
-                elif stage_name == "adult":
-                    motion_controller.go_to_lying_back()
-                elif stage_name == "elderly":
-                    motion_controller.go_to_sit_relax()
             except Exception as e:
                 print(f"[ERROR] Failed to generate opening line: {e}")
             
@@ -570,12 +515,6 @@ def main() -> None:
                     motion_controller.play_for_emotions(tags)
                 except Exception as motion_err:  # pylint: disable=broad-except
                     print(f"[MOTION] Skipped motion due to error: {motion_err}")
-                if stage_name == "baby":
-                    motion_controller.go_to_crouch()
-                elif stage_name == "adult":
-                    motion_controller.go_to_lying_back()
-                elif stage_name == "elderly":
-                    motion_controller.go_to_sit_relax()
 
                 # D. Control Step: Continue or Wrap Up?
                 while True:
@@ -611,38 +550,14 @@ def main() -> None:
                                 motion_controller.play_for_emotions(f_tags)
                             except Exception as motion_err:  # pylint: disable=broad-except
                                 print(f"[MOTION] Skipped closing motion due to error: {motion_err}")
-                            if stage_name == "baby":
-                                motion_controller.go_to_crouch()
-                            elif stage_name == "adult":
-                                # During adult stage keep lying, but after the final event we will stand.
-                                if is_last_event:
-                                    motion_controller.go_to_stand()
-                                else:
-                                    motion_controller.go_to_lying_back()
-                            elif stage_name == "elderly":
-                                # For elderly, stay low; final shutdown will move to LyingBelly.
-                                pass
 
                             # Wait for speech to finish, then perform the final action
                             print("[System] Wrap-up speech finished. Performing final action.")
                             try:
-                                if stage_name == "elderly" and is_last_event:
-                                    motion_controller.perform_elderly_shutdown()
-                                else:
-                                    motion_controller.perform_wrap_up_action(use_spin=is_last_event)
+                                motion_controller.perform_wrap_up_action(use_spin=is_last_event)
                             except Exception as motion_err:  # pylint: disable=broad-except
                                 print(f"[MOTION] Skipped wrap-up action due to error: {motion_err}")
-                            if stage_name == "baby":
-                                motion_controller.go_to_crouch()
-                            elif stage_name == "adult":
-                                if is_last_event:
-                                    motion_controller.go_to_stand()
-                                else:
-                                    motion_controller.go_to_lying_back()
-                            elif stage_name == "elderly":
-                                # After final shutdown, remain in LyingBelly; do not reset to sit or stand.
-                                pass
-
+                            
                             # Save interaction summary to life memory
                             # We summarize the last assistant message as the result
                             life_memory_log.append(f"Stage: {stage_name} | Event: {event_key} | Result: Interaction completed.")

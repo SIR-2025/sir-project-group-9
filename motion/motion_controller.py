@@ -12,6 +12,7 @@ import nao_basic_motion # Import the refactored basic motion functions
 from sic_framework.devices.common_naoqi.naoqi_text_to_speech import (
     NaoqiTextToSpeechRequest,
 )
+from sic_framework.devices.common_naoqi.naoqi_motion import NaoPostureRequest
 
 
 class EmotionMotionController:
@@ -77,6 +78,41 @@ class EmotionMotionController:
     # ------------------------------------------------------------------
     # Tag normalization and animation mapping
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_animation_name(name: str) -> Optional[str]:
+        """
+        Resolve a provided animation identifier to a known full path using emo_list lists.
+        Accepts full paths or suffixes like 'Angry_1'. Returns the best match or None.
+        """
+        if not name:
+            return None
+
+        animations = getattr(emo_list, "ALL_ANIMATIONS", [])
+        lowered = name.strip().lower()
+        if not lowered:
+            return None
+
+        # Exact full-path match (case-sensitive or insensitive)
+        if name.startswith("animations/"):
+            for anim in animations:
+                if name == anim:
+                    return anim
+            for anim in animations:
+                if anim.lower() == lowered:
+                    return anim
+
+        # Suffix match, case-insensitive
+        matches = [a for a in animations if a.lower().endswith("/" + lowered)]
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return matches[0]
+        # Prefer gesture path if duplicates
+        gesture_matches = [m for m in matches if "/gestures/" in m.lower()]
+        if gesture_matches:
+            return gesture_matches[0]
+        return matches[0]
 
     @staticmethod
     def _normalize_tag(tag: str) -> str:
@@ -146,8 +182,8 @@ class EmotionMotionController:
         # Choose whether to use animated TTS based on whether we have an emotion.
         animated = emotion_tag is not None and not emotion_tag.startswith("gesture_")
 
-        # Set volume to 50% using an embedded TTS tag.
-        modified_text = f"\\vct=50\\{text}"
+        # Slightly louder voice than before (70%).
+        modified_text = f"\\vct=100\\{text}"
 
         # Real robot available
         if self.is_real_robot_available():
@@ -199,6 +235,7 @@ class EmotionMotionController:
 
         for tag in filtered:
             animation = self._find_animation_for_tag(tag)
+            resolved = self._resolve_animation_name(animation) or animation
             if not animation:
                 print(f"[MOTION] No animation mapped for tag '{tag}'.")
                 continue
@@ -207,17 +244,17 @@ class EmotionMotionController:
             if self.is_real_robot_available():
                 try:
                     print(
-                        f"[MOTION] Playing animation '{animation}' for tag '{tag}'."
+                        f"[MOTION] Playing animation '{resolved}' for tag '{tag}'."
                     )
-                    self.app.play_animation(animation)
+                    self.app.play_animation(resolved)
                 except Exception as exc:  # pylint: disable=broad-except
-                    print(f"[MOTION] Error while playing animation '{animation}': {exc}")
+                    print(f"[MOTION] Error while playing animation '{resolved}': {exc}")
                 continue
 
             # No real robot, but simulation allowed
             if self.enable_simulation:
                 print(
-                    f"[MOTION][SIM] Would play animation '{animation}' for tag '{tag}'."
+                    f"[MOTION][SIM] Would play animation '{resolved}' for tag '{tag}'."
                 )
             else:
                 print("[MOTION] Robot is not available and simulation is disabled.")
@@ -226,18 +263,88 @@ class EmotionMotionController:
     # Special high-level actions
     # ------------------------------------------------------------------
 
-    def perform_wrap_up_action(self) -> None:
+    def go_to_crouch(self, speed: float = 0.3) -> None:
         """
-        Performs the wrap-up action by calling the change_position function.
-        This is intended to be called at the end of a scene.
+        Move to the built-in Crouch posture. Used to keep low posture in baby stage.
         """
         if self.is_real_robot_available():
-            print("[MOTION] Performing wrap-up action 'change_position'.")
             try:
-                # Pass the existing Nao connection object to the refactored function
-                nao_basic_motion.change_position(self.app.nao)
+                self.app.nao.motion.request(NaoPostureRequest("Crouch", speed))
+                print("[MOTION] Switched to Crouch posture.")
+            except Exception as exc:  # pylint: disable=broad-except
+                print(f"[MOTION] Failed to switch to Crouch: {exc}")
+        elif self.enable_simulation:
+            print("[MOTION][SIM] Would switch to Crouch posture.")
+
+    def perform_wrap_up_action(self, use_spin: bool = False) -> None:
+        """
+        Performs the wrap-up action.
+        If use_spin is True and a real robot is available, perform a spin.
+        Otherwise perform the default change_position sequence.
+        """
+        action_label = "spin_in_place" if use_spin else "change_position"
+
+        if self.is_real_robot_available():
+            print(f"[MOTION] Performing wrap-up action '{action_label}'.")
+            try:
+                if use_spin:
+                    nao_basic_motion.spin_in_place(self.app.nao)
+                else:
+                    nao_basic_motion.change_position(self.app.nao)
             except Exception as e:
                 print(f"[MOTION] Error during wrap-up action: {e}")
         else:
             # If no real robot, simulate the action
-            print("[MOTION][SIM] Would perform 'change_position' sequence as wrap-up action.")
+            if use_spin:
+                print("[MOTION][SIM] Would perform 'spin_in_place' as wrap-up action.")
+            else:
+                print("[MOTION][SIM] Would perform 'change_position' sequence as wrap-up action.")
+
+    # ------------------------------------------------------------------
+    # Posture helpers
+    # ------------------------------------------------------------------
+
+    def go_to_posture(self, posture: str, speed: float = 0.3) -> None:
+        """
+        Generic helper to move to a NAO built-in posture.
+        """
+        posture = posture.strip()
+        if not posture:
+            return
+        speed = max(0.05, min(speed, 1.0))
+
+        if self.is_real_robot_available():
+            try:
+                self.app.nao.motion.request(NaoPostureRequest(posture, speed))
+                print(f"[MOTION] Switched to posture '{posture}'.")
+            except Exception as exc:  # pylint: disable=broad-except
+                print(f"[MOTION] Failed to switch to posture '{posture}': {exc}")
+        elif self.enable_simulation:
+            print(f"[MOTION][SIM] Would switch to posture '{posture}'.")
+
+    def go_to_lying_back(self, speed: float = 0.3) -> None:
+        self.go_to_posture("LyingBack", speed)
+
+    def go_to_sit_relax(self, speed: float = 0.3) -> None:
+        self.go_to_posture("SitRelax", speed)
+
+    def go_to_stand(self, speed: float = 0.4) -> None:
+        self.go_to_posture("StandInit", speed)
+
+    def go_to_lying_belly(self, speed: float = 0.3) -> None:
+        self.go_to_posture("LyingBelly", speed)
+
+    def perform_elderly_shutdown(self) -> None:
+        """
+        Elderly wrap-up: Stand, then change position, then lie on belly.
+        """
+        print("[MOTION] Performing elderly shutdown sequence: Stand -> change_position -> LyingBelly.")
+        try:
+            self.go_to_stand()
+            if self.is_real_robot_available():
+                nao_basic_motion.change_position(self.app.nao)
+            elif self.enable_simulation:
+                print("[MOTION][SIM] Would perform 'change_position' sequence.")
+            self.go_to_lying_belly()
+        except Exception as exc:  # pylint: disable=broad-except
+            print(f"[MOTION] Elderly shutdown sequence failed: {exc}")
