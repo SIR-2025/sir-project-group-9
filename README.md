@@ -26,6 +26,13 @@ This project turns a NAO humanoid robot into a parenting device for the SIR cour
 - Access to a NAO robot (optional in simulation mode)
 - An LLM API key (currently configured for DeepSeek in code)
 
+## Environment Setup (via conda)
+1. Install Anaconda or Miniconda if not already available.
+2. From the repo root, create the env: `conda env create -f environment.yml`.
+3. Activate: `conda activate sic`.
+4. If you update `environment.yml`, sync with: `conda env update -f environment.yml --prune`.
+5. Verify inside the env: `python --version` and `python -m pip list | head` to confirm packages resolved.
+
 ## Configuration
 1. **API key**: In `motion/new_main.py`, update the placeholder key inside `create_openai_client`.
 2. **Robot IP**: In `motion/motion_controller.py`, set `nao_ip` in `EmotionMotionController.__init__`.
